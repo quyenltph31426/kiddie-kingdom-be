@@ -1,0 +1,26 @@
+include:
+  - project: var-ai/devops-template
+    file: be-nestjs/gitlab-ci.yml
+    inputs:
+      project-name: battle ai websocket server
+
+build:
+  extends: .build-template
+  tags:
+    - vm-0g-runner
+
+deploy-staging:
+  extends: .deploy-template
+  tags:
+    - var-ai-runner
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "staging"'
+      when: always
+
+deploy-production:
+  extends: .deploy-template
+  tags:
+    - vm-0g-runner
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "main"'
+      when: always
