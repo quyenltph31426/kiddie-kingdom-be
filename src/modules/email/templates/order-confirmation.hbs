@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Order Confirmation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .content {
+      background-color: #f9f9f9;
+      padding: 20px;
+      border-radius: 5px;
+    }
+    .order-details {
+      margin: 20px 0;
+    }
+    .order-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    .order-table th, .order-table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    .order-table th {
+      background-color: #f2f2f2;
+    }
+    .total-row {
+      font-weight: bold;
+    }
+    .button {
+      display: inline-block;
+      background-color: #4CAF50;
+      color: white;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 5px;
+      margin-top: 20px;
+    }
+    .footer {
+      margin-top: 30px;
+      text-align: center;
+      font-size: 12px;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Order Confirmation</h1>
+  </div>
+  
+  <div class="content">
+    <p>Hello {{username}},</p>
+    
+    <p>Thank you for your order! We're pleased to confirm that we've received your order and it's being processed.</p>
+    
+    <div class="order-details">
+      <p><strong>Order Number:</strong> {{orderId}}</p>
+      <p><strong>Order Date:</strong> {{orderDate}}</p>
+      
+      <h3>Order Summary</h3>
+      <table class="order-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Quantity</th>
+            <th>Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each items}}
+          <tr>
+            <td>{{this.name}}</td>
+            <td>{{this.quantity}}</td>
+            <td>${{this.price}}</td>
+          </tr>
+          {{/each}}
+          <tr class="total-row">
+            <td colspan="2">Total</td>
+            <td>${{total}}</td>
+          </tr>
+        </tbody>
+      </table>
+      
+      <h3>Shipping Address</h3>
+      <p>
+        {{shippingAddress.name}}<br>
+        {{shippingAddress.street}}<br>
+        {{shippingAddress.city}}, {{shippingAddress.state}} {{shippingAddress.zip}}<br>
+        {{shippingAddress.country}}
+      </p>
+    </div>
+    
+    <p>You can track your order status by clicking the button below:</p>
+    
+    <div style="text-align: center;">
+      <a href="{{orderUrl}}" class="button">View Order Details</a>
+    </div>
+    
+    <p>If you have any questions or concerns about your order, please contact our customer service team.</p>
+    
+    <p>Thank you for shopping with us!</p>
+    
+    <p>Best regards,<br>The {{appName}} Team</p>
+  </div>
+  
+  <div class="footer">
+    <p>&copy; {{year}} {{appName}}. All rights reserved.</p>
+    <p>This is an automated email, please do not reply to this message.</p>
+  </div>
+</body>
+</html>
