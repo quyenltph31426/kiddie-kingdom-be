@@ -6,7 +6,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth, ApiQuery } 
 import { AuthGuard } from './guards/auth.guard';
 import { User } from '@/shared/decorator/user.decorator';
 
-@ApiTags('User/auth')
+@ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
   constructor(
