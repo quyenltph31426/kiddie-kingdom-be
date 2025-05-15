@@ -5,40 +5,58 @@ import { Order, OrderDocument } from '@/database/schemas/order.schema';
 import { CreateOrderDto } from '../dto/create-order.dto';
 import { OrderStatus, PAYMENT_METHOD } from '@/shared/enums';
 import { PaymentService } from './payment.service';
-import { ProductService } from '@/modules/product/services/product.service';
+import { Product, ProductDocument } from '@/database/schemas/product.schema';
+
+interface OrderWithPayment extends Order {
+  paymentSession?: any;
+}
 
 @Injectable()
 export class OrderService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     private paymentService: PaymentService,
-    private productService: ProductService,
   ) {}
 
-  async create(createOrderDto: CreateOrderDto, userId: string): Promise<Order> {
+  async create(createOrderDto: CreateOrderDto, userId: string): Promise<OrderWithPayment> {
     const { items, paymentMethod, shippingAddress, voucherId } = createOrderDto;
 
     // Validate products and get their details
     const orderItems = await Promise.all(
       items.map(async (item) => {
-        const product = await this.productService.findOne(item.productId);
+        const product = await this.productModel.findById(item.productId);
         if (!product) {
           throw new BadRequestException(`Product with ID ${item.productId} not found`);
         }
 
         // Check if product is in stock
-        if (product.quantity < item.quantity) {
-          throw new BadRequestException(`Product ${product.name} is out of stock`);
-        }
+        let variantPrice = 0; // Declare variantPrice variable
 
-        // Get variant if specified
-        let variantPrice = product.price;
-        if (item.variantId) {
-          const variant = product.variants.find((v) => v._id.toString() === item.variantId);
-          if (!variant) {
-            throw new BadRequestException(`Variant with ID ${item.variantId} not found`);
+        if (product.variants && product.variants.length > 0) {
+          // For products with variants
+          if (item.variantId) {
+            // If specific variant is selected
+            const variant = product.variants.find((v) => v._id.toString() === item.variantId);
+            if (!variant) {
+              throw new BadRequestException(`Variant with ID ${item.variantId} not found`);
+            }
+            if (variant.quantity < item.quantity) {
+              throw new BadRequestException(`Product ${product.name} (variant ${variant.sku}) is out of stock`);
+            }
+            variantPrice = variant.price;
+          } else {
+            // If no specific variant is selected, check total quantity across all variants
+            const totalVariantQuantity = product.variants.reduce((total, variant) => total + variant.quantity, 0);
+            if (totalVariantQuantity < item.quantity) {
+              throw new BadRequestException(`Product ${product.name} is out of stock`);
+            }
+            // Use the lowest price among variants
+            variantPrice = Math.min(...product.variants.map((v) => v.price));
           }
-          variantPrice = variant.price;
+        } else {
+          // For simple products without variants
+          throw new BadRequestException(`Product ${product.name} has no variants`);
         }
 
         return {

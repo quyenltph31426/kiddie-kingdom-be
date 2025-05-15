@@ -13,7 +13,7 @@ export class OrderClientController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new order' })
-  create(@Body() createOrderDto: CreateOrderDto, @Request() req) {
+  async createOrder(@Body() createOrderDto: CreateOrderDto, @Request() req): Promise<any> {
     return this.orderService.create(createOrderDto, req.user.sub);
   }
 

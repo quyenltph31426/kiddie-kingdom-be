@@ -136,14 +136,16 @@ export class PaymentService {
     const sortedParams = this.sortObject(vnpParams);
 
     // Create signature
-    const signData = querystring.stringify(sortedParams, { encode: false });
+    const signData = Object.entries(sortedParams)
+      .map(([key, value]) => `${key}=${value}`)
+      .join('&');
     const hmac = crypto.createHmac('sha512', secretKey);
     const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 
     sortedParams['vnp_SecureHash'] = signed;
 
     // Return full payment URL
-    return `${vnpUrl}?${querystring.stringify(sortedParams, { encode: true })}`;
+    return `${vnpUrl}?${querystring.stringify(sortedParams)}`;
   }
 
   private sortObject(obj: any): any {
@@ -172,7 +174,7 @@ export class PaymentService {
       const sortedParams = this.sortObject(vnpParams);
 
       // Verify signature
-      const signData = querystring.stringify(sortedParams, { encode: false });
+      const signData = querystring.stringify(sortedParams);
       const hmac = crypto.createHmac('sha512', this.vnpayConfig.hashSecret);
       const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 
