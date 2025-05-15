@@ -27,44 +27,63 @@ export class CartService {
       cart = await this.cartModel.create({
         userId: new Types.ObjectId(userId),
         items: [],
-        totalPrice: 0,
       });
+      return { items: [], _id: cart._id };
     }
 
-    // Transform the cart data for the client
-    const transformedItems = cart.items.map((item) => {
-      const product = item.productId as any;
+    // Transform cart items to match the required interface
+    const transformedItems = cart.items
+      .map((item) => {
+        const product = item.productId as any;
+        if (!product) return null;
 
-      return {
-        productId: product._id,
-        name: product.name,
-        slug: product.slug,
-        image: product.images && product.images.length > 0 ? product.images[0] : null,
-        price: item.price,
-        quantity: item.quantity,
-        variantId: item.variantId,
-        attributes: item.attributes,
-        total: item.price * item.quantity,
-      };
-    });
+        // Find variant if variantId exists
+        let price = product.originalPrice;
+        let attributes = {};
+        let totalQuantity = 0;
+
+        if (product.variants && product.variants.length > 0) {
+          // Get total quantity across all variants
+          totalQuantity = product.variants.reduce((sum, v) => sum + (v.quantity || 0), 0);
+
+          // If there's a variantId, find the specific variant
+          if (item.variantId) {
+            const variant = product.variants.find((v) => v._id && v._id.toString() === item.variantId.toString());
+
+            if (variant) {
+              price =
+                variant.price ||
+                (variant.salePrice && product.isOnSale ? variant.salePrice : variant.price) ||
+                product.originalPrice;
+              attributes = variant.attributes || {};
+            }
+          } else {
+            // If no variantId, use the first variant or default price
+            price = product.variants[0].price || product.originalPrice;
+          }
+        }
+
+        return {
+          _id: item._id.toString(),
+          productId: product._id.toString(),
+          variantId: item.variantId ? item.variantId.toString() : null,
+          quantity: item.quantity,
+          name: product.name,
+          price: price,
+          image: product.images && product.images.length > 0 ? product.images[0] : null,
+          attributes: attributes,
+          totalQuantity: totalQuantity,
+        };
+      })
+      .filter(Boolean);
 
     return {
+      _id: cart._id,
       items: transformedItems,
-      meta: {
-        totalItems: cart.items.reduce((sum, item) => sum + item.quantity, 0),
-        totalUniqueItems: cart.items.length,
-        totalPrice: cart.totalPrice,
-      },
     };
   }
 
-  async addToCart(
-    userId: string,
-    productId: string,
-    quantity: number,
-    variantId?: string,
-    attributes?: Record<string, string>,
-  ) {
+  async addToCart(userId: string, productId: string, quantity: number, variantId?: string) {
     // Validate quantity
     if (quantity < MIN_QUANTITY_PER_ITEM) {
       throw new BadRequestException(`Quantity must be at least ${MIN_QUANTITY_PER_ITEM}`);
@@ -74,27 +93,14 @@ export class CartService {
       throw new BadRequestException(`Maximum quantity per item is ${MAX_QUANTITY_PER_ITEM}`);
     }
 
-    // Verify product exists and is active
-    const product = await this.productModel.findOne({
-      _id: productId,
-      isActive: true,
-    });
-
+    // Validate product
+    const product = await this.productModel.findById(productId);
     if (!product) {
-      throw new NotFoundException('Product not found or is not available');
+      throw new NotFoundException('Product not found');
     }
 
-    // Determine price based on variant or product
-    let price = product.originalPrice;
-    let variantObjectId = null;
-
-    if (variantId && product.variants && product.variants.length > 0) {
-      const variant = product.variants.find((v) => v._id.toString() === variantId);
-      if (!variant) {
-        throw new NotFoundException('Product variant not found');
-      }
-      price = variant.price;
-      variantObjectId = new Types.ObjectId(variantId);
+    if (!product.isActive) {
+      throw new BadRequestException('Product is not available');
     }
 
     // Find or create cart
@@ -104,18 +110,17 @@ export class CartService {
       cart = await this.cartModel.create({
         userId: new Types.ObjectId(userId),
         items: [],
-        totalPrice: 0,
       });
     }
 
-    // Check if adding this would exceed the maximum cart items
-    if (
-      cart.items.length >= MAX_CART_ITEMS &&
-      !cart.items.some(
-        (item) => item.productId.toString() === productId && (!variantId || item.variantId?.toString() === variantId),
-      )
-    ) {
+    // Check if cart has reached maximum items
+    if (cart.items.length >= MAX_CART_ITEMS && !cart.items.some((item) => item.productId.toString() === productId)) {
       throw new BadRequestException(`Cart cannot contain more than ${MAX_CART_ITEMS} unique items`);
+    }
+
+    let variantObjectId = null;
+    if (variantId) {
+      variantObjectId = new Types.ObjectId(variantId);
     }
 
     // Check if item already exists in cart
@@ -124,24 +129,25 @@ export class CartService {
     );
 
     if (existingItemIndex > -1) {
-      // Update existing item
-      cart.items[existingItemIndex].quantity = quantity;
-      cart.items[existingItemIndex].price = price;
-      if (attributes) {
-        cart.items[existingItemIndex].attributes = attributes;
+      // Update existing item - ADD to current quantity instead of replacing
+      const newQuantity = cart.items[existingItemIndex].quantity + quantity;
+
+      // Make sure we don't exceed the maximum quantity
+      if (newQuantity > MAX_QUANTITY_PER_ITEM) {
+        throw new BadRequestException(`Cannot add more items. Maximum quantity per item is ${MAX_QUANTITY_PER_ITEM}`);
       }
+
+      cart.items[existingItemIndex].quantity = newQuantity;
     } else {
       // Add new item
       cart.items.push({
         productId: new Types.ObjectId(productId),
         variantId: variantObjectId,
         quantity,
-        price,
-        attributes,
       });
     }
 
-    // Save cart (pre-save hook will calculate totalPrice)
+    // Save cart
     await cart.save();
 
     return this.getCart(userId);
@@ -175,7 +181,7 @@ export class CartService {
     // Update quantity
     cart.items[itemIndex].quantity = quantity;
 
-    // Save cart (pre-save hook will calculate totalPrice)
+    // Save cart
     await cart.save();
 
     return this.getCart(userId);
@@ -185,7 +191,7 @@ export class CartService {
     const cart = await this.cartModel.findOne({ userId: new Types.ObjectId(userId) });
 
     if (!cart) {
-      throw new NotFoundException('Cart not found');
+      return { success: true };
     }
 
     // Find the item in the cart
@@ -194,13 +200,13 @@ export class CartService {
     );
 
     if (itemIndex === -1) {
-      throw new NotFoundException('Item not found in cart');
+      return { success: true };
     }
 
     // Remove the item
     cart.items.splice(itemIndex, 1);
 
-    // Save cart (pre-save hook will calculate totalPrice)
+    // Save cart
     await cart.save();
 
     return this.getCart(userId);
@@ -233,46 +239,42 @@ export class CartService {
       cart = await this.cartModel.create({
         userId: new Types.ObjectId(userId),
         items: [],
-        totalPrice: 0,
       });
+    }
+
+    // Check if cart would exceed maximum items
+    const newUniqueItems = guestCartItems.filter(
+      (guestItem) =>
+        !cart.items.some(
+          (item) =>
+            item.productId.toString() === guestItem.productId &&
+            (!guestItem.variantId || item.variantId?.toString() === guestItem.variantId),
+        ),
+    );
+
+    if (cart.items.length + newUniqueItems.length > MAX_CART_ITEMS) {
+      throw new BadRequestException(`Cart cannot contain more than ${MAX_CART_ITEMS} unique items`);
     }
 
     // Process each guest cart item
     for (const guestItem of guestCartItems) {
-      // Verify product exists and is active
-      const product = await this.productModel.findOne({
-        _id: guestItem.productId,
-        isActive: true,
-      });
-
-      if (!product) {
-        continue; // Skip invalid products
+      // Validate product
+      const product = await this.productModel.findById(guestItem.productId);
+      if (!product || !product.isActive) {
+        continue; // Skip inactive or non-existent products
       }
 
-      // Determine price based on variant or product
-      let price = product.originalPrice;
       let variantObjectId = null;
-
-      if (guestItem.variantId && product.variants && product.variants.length > 0) {
-        const variant = product.variants.find((v) => v._id.toString() === guestItem.variantId);
-        if (!variant) {
-          continue; // Skip invalid variants
-        }
-        price = variant.price;
+      if (guestItem.variantId) {
         variantObjectId = new Types.ObjectId(guestItem.variantId);
       }
 
-      // Check if item already exists in cart
+      // Find if item already exists in cart
       const existingItemIndex = cart.items.findIndex(
         (item) =>
           item.productId.toString() === guestItem.productId &&
           (!guestItem.variantId || item.variantId?.toString() === guestItem.variantId),
       );
-
-      // Ensure we don't exceed max items
-      if (cart.items.length >= MAX_CART_ITEMS && existingItemIndex === -1) {
-        continue; // Skip if we would exceed max items
-      }
 
       // Ensure quantity is within limits
       const quantity = Math.min(Math.max(guestItem.quantity, MIN_QUANTITY_PER_ITEM), MAX_QUANTITY_PER_ITEM);
@@ -280,23 +282,17 @@ export class CartService {
       if (existingItemIndex > -1) {
         // Update existing item - take the higher quantity
         cart.items[existingItemIndex].quantity = Math.max(cart.items[existingItemIndex].quantity, quantity);
-        cart.items[existingItemIndex].price = price;
-        if (guestItem.attributes) {
-          cart.items[existingItemIndex].attributes = guestItem.attributes;
-        }
       } else {
         // Add new item
         cart.items.push({
           productId: new Types.ObjectId(guestItem.productId),
           variantId: variantObjectId,
           quantity,
-          price,
-          attributes: guestItem.attributes,
         });
       }
     }
 
-    // Save cart (pre-save hook will calculate totalPrice)
+    // Save cart
     await cart.save();
 
     return this.getCart(userId);

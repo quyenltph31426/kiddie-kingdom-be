@@ -1,12 +1,22 @@
-import { IsArray, ValidateNested, IsOptional } from 'class-validator';
+import { IsArray, ValidateNested, IsOptional, IsString, IsNumber, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 class CartItemDto {
+  @ApiProperty({ description: 'Product ID' })
+  @IsString()
   productId: string;
+
+  @ApiProperty({ description: 'Quantity', minimum: 1, maximum: 10 })
+  @IsNumber()
+  @Min(1)
+  @Max(10)
   quantity: number;
+
+  @ApiPropertyOptional({ description: 'Variant ID (if applicable)' })
+  @IsOptional()
+  @IsString()
   variantId?: string;
-  attributes?: Record<string, string>;
 }
 
 export class MergeCartDto {

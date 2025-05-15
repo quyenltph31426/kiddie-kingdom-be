@@ -15,6 +15,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { CartModule } from './modules/cart/cart.module';
 import { ProductFavoriteModule } from './modules/product-favorite/product-favorite.module';
 import { EmailModule } from './modules/email/email.module';
+import { BannerModule } from './modules/banner/banner.module';
 import authConfig from './config/auth.config';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
@@ -41,6 +42,7 @@ import emailConfig from './config/email.config';
     CartModule,
     ProductFavoriteModule,
     EmailModule,
+    BannerModule,
   ],
   controllers: [AppController],
   providers: [AppService],

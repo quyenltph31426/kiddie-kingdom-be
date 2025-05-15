@@ -6,7 +6,6 @@ import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
 import { RemoveFromCartDto } from './dto/remove-from-cart.dto';
 import { MergeCartDto } from './dto/merge-cart.dto';
-import { Public } from '@/modules/auth/decorators/public.decorator';
 
 @ApiTags('Cart')
 @Controller('cart')
@@ -29,7 +28,6 @@ export class CartController {
       addToCartDto.productId,
       addToCartDto.quantity,
       addToCartDto.variantId,
-      addToCartDto.attributes,
     );
   }
 
