@@ -106,46 +106,44 @@ export class PaymentService {
     const date = new Date();
     const createDate = moment(date).format('YYYYMMDDHHmmss');
     const orderId = `${moment(date).format('YYYYMMDDHHmmss')}_${order._id.toString()}`;
-    const amount = Math.round(order.totalAmount * 100); // Convert to smallest currency unit (VND doesn't have decimals)
-    const bankCode = ''; // Leave blank for VNPay payment page with all methods
+    const amount = Math.round(order.totalAmount * 100); // chuyển thành đơn vị đồng
     const orderInfo = `Payment for order ${order.orderNumber}`;
-    const orderType = 'billpayment';
-    const locale = 'vn';
-    const currCode = 'VND';
 
-    const vnpParams = {
+    const vnpParams: Record<string, string> = {
       vnp_Version: '2.1.0',
       vnp_Command: 'pay',
       vnp_TmnCode: tmnCode,
-      vnp_Locale: locale,
-      vnp_CurrCode: currCode,
+      vnp_Locale: 'vn',
+      vnp_CurrCode: 'VND',
       vnp_TxnRef: orderId,
       vnp_OrderInfo: orderInfo,
-      vnp_OrderType: orderType,
-      vnp_Amount: amount,
+      vnp_OrderType: 'billpayment',
+      vnp_Amount: amount.toString(),
       vnp_ReturnUrl: returnUrl,
-      vnp_IpAddr: '127.0.0.1', // Should be replaced with actual IP in production
+      vnp_IpAddr: '127.0.0.1', // kiểm tra lại IP khi triển khai thực tế
       vnp_CreateDate: createDate,
     };
 
-    if (bankCode) {
-      vnpParams['vnp_BankCode'] = bankCode;
-    }
-
-    // Sort params by key
     const sortedParams = this.sortObject(vnpParams);
 
-    // Create signature
     const signData = Object.entries(sortedParams)
       .map(([key, value]) => `${key}=${value}`)
       .join('&');
+
+    // Tạo chữ ký
     const hmac = crypto.createHmac('sha512', secretKey);
-    const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
+    const signed = hmac.update(signData, 'utf8').digest('hex');
+
+    console.log('Sign Data:', signData);
+    console.log('Signed:', signed);
 
     sortedParams['vnp_SecureHash'] = signed;
 
-    // Return full payment URL
-    return `${vnpUrl}?${querystring.stringify(sortedParams)}`;
+    const queryString = querystring.stringify(sortedParams);
+
+    console.log('Query String:', queryString);
+
+    return `${vnpUrl}?${queryString}`;
   }
 
   private sortObject(obj: any): any {
@@ -177,6 +175,8 @@ export class PaymentService {
       const signData = querystring.stringify(sortedParams);
       const hmac = crypto.createHmac('sha512', this.vnpayConfig.hashSecret);
       const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
+
+      console.log(signed, secureHash);
 
       // Check if signature is valid
       if (secureHash !== signed) {

@@ -21,6 +21,7 @@ import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import serverConfig from './config/server.config';
 import emailConfig from './config/email.config';
+import { OrderModule } from './modules/order/order.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import emailConfig from './config/email.config';
     ProductFavoriteModule,
     EmailModule,
     BannerModule,
+    OrderModule,
   ],
   controllers: [AppController],
   providers: [AppService],

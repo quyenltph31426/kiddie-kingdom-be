@@ -101,6 +101,7 @@ export class ProductAdminService {
           price: variant.price,
           quantity: variant.quantity,
           attributes: variant.attributes,
+          _id: variant._id,
         })),
       };
     });

@@ -17,11 +17,6 @@ export class OrderItemDto {
   @ApiProperty({ description: 'Quantity', minimum: 1 })
   @IsNotEmpty()
   quantity: number;
-
-  @ApiProperty({ description: 'Product attributes', required: false, type: Object })
-  @IsObject()
-  @IsOptional()
-  attributes?: Record<string, string>;
 }
 
 export class ShippingAddressDto {

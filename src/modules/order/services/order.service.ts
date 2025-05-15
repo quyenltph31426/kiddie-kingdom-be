@@ -25,75 +25,129 @@ export class OrderService {
     // Validate products and get their details
     const orderItems = await Promise.all(
       items.map(async (item) => {
-        const product = await this.productModel.findById(item.productId);
-        if (!product) {
-          throw new BadRequestException(`Product with ID ${item.productId} not found`);
-        }
-
-        // Check if product is in stock
-        let variantPrice = 0; // Declare variantPrice variable
-
-        if (product.variants && product.variants.length > 0) {
-          // For products with variants
-          if (item.variantId) {
-            // If specific variant is selected
-            const variant = product.variants.find((v) => v._id.toString() === item.variantId);
-            if (!variant) {
-              throw new BadRequestException(`Variant with ID ${item.variantId} not found`);
-            }
-            if (variant.quantity < item.quantity) {
-              throw new BadRequestException(`Product ${product.name} (variant ${variant.sku}) is out of stock`);
-            }
-            variantPrice = variant.price;
-          } else {
-            // If no specific variant is selected, check total quantity across all variants
-            const totalVariantQuantity = product.variants.reduce((total, variant) => total + variant.quantity, 0);
-            if (totalVariantQuantity < item.quantity) {
-              throw new BadRequestException(`Product ${product.name} is out of stock`);
-            }
-            // Use the lowest price among variants
-            variantPrice = Math.min(...product.variants.map((v) => v.price));
+        try {
+          // Validate product ID format
+          if (!Types.ObjectId.isValid(item.productId)) {
+            throw new BadRequestException(`Invalid product ID format: ${item.productId}`);
           }
-        } else {
-          // For simple products without variants
-          throw new BadRequestException(`Product ${product.name} has no variants`);
-        }
 
-        return {
-          productId: new Types.ObjectId(item.productId),
-          variantId: item.variantId ? new Types.ObjectId(item.variantId) : undefined,
-          quantity: item.quantity,
-          price: variantPrice,
-          productName: product.name,
-          attributes: item.attributes,
-        };
+          const product = await this.productModel.findById(new Types.ObjectId(item.productId));
+          if (!product) {
+            throw new BadRequestException(`Product with ID ${item.productId} not found`);
+          }
+
+          // Check if product is in stock
+          let variantPrice = 0; // Declare variantPrice variable
+
+          if (product.variants && product.variants.length > 0) {
+            // For products with variants
+            if (item.variantId) {
+              // Validate variant ID format
+              if (!Types.ObjectId.isValid(item.variantId)) {
+                throw new BadRequestException(`Invalid variant ID format: ${item.variantId}`);
+              }
+
+              // If specific variant is selected
+              const variant = product.variants.find((v) => v._id && v._id.toString() === item.variantId);
+
+              if (!variant) {
+                throw new BadRequestException(`Variant with ID ${item.variantId} not found`);
+              }
+
+              if (variant.quantity < item.quantity) {
+                throw new BadRequestException(
+                  `Product ${product.name} (variant ${variant.sku || 'unknown'}) is out of stock`,
+                );
+              }
+
+              variantPrice = variant.price;
+            } else {
+              // If no specific variant is selected, check total quantity across all variants
+              const totalVariantQuantity = product.variants.reduce(
+                (total, variant) => total + (variant.quantity || 0),
+                0,
+              );
+
+              if (totalVariantQuantity < item.quantity) {
+                throw new BadRequestException(`Product ${product.name} is out of stock`);
+              }
+
+              // Use the lowest price among variants
+              const prices = product.variants
+                .filter((v) => v.price !== undefined && v.price !== null)
+                .map((v) => v.price);
+
+              if (prices.length === 0) {
+                throw new BadRequestException(`Product ${product.name} has no valid price`);
+              }
+
+              variantPrice = Math.min(...prices);
+            }
+          } else {
+            // For simple products without variants
+            throw new BadRequestException(`Product ${product.name} has no variants`);
+          }
+
+          return {
+            productId: new Types.ObjectId(item.productId),
+            variantId:
+              item.variantId && Types.ObjectId.isValid(item.variantId) ? new Types.ObjectId(item.variantId) : undefined,
+            quantity: item.quantity,
+            price: variantPrice,
+            productName: product.name,
+          };
+        } catch (error) {
+          if (error instanceof BadRequestException) {
+            throw error;
+          }
+          console.error('Error processing order item:', error);
+          throw new BadRequestException(`Error processing product ${item.productId}: ${error.message}`);
+        }
       }),
     );
 
-    // Create the order
-    const order = new this.orderModel({
-      userId: new Types.ObjectId(userId),
-      items: orderItems,
-      paymentMethod,
-      shippingAddress,
-      voucherId: voucherId ? new Types.ObjectId(voucherId) : undefined,
-      status: OrderStatus.TO_PAY,
-    });
+    try {
+      // Calculate total amount
+      const totalAmount = orderItems.reduce((total, item) => total + item.price * item.quantity, 0);
 
-    // Save the order
-    const savedOrder = await order.save();
+      // Generate unique order number
+      const timestamp = new Date().getTime().toString().slice(-8);
+      const random = Math.floor(Math.random() * 10000)
+        .toString()
+        .padStart(4, '0');
+      const orderNumber = `ORD-${timestamp}${random}`;
 
-    // If online payment, create payment session
-    if (paymentMethod === PAYMENT_METHOD.ONLINE_PAYMENT) {
-      const paymentSession = await this.paymentService.createPaymentSession(savedOrder._id.toString(), userId);
+      // Create the order
+      const order = new this.orderModel({
+        userId: new Types.ObjectId(userId),
+        items: orderItems,
+        paymentMethod,
+        shippingAddress,
+        voucherId: voucherId && Types.ObjectId.isValid(voucherId) ? new Types.ObjectId(voucherId) : undefined,
+        status: OrderStatus.TO_PAY,
+        totalAmount: totalAmount,
+        orderNumber: orderNumber,
+        discountAmount: 0, // Set default discount amount
+      });
 
-      return {
-        ...savedOrder.toObject(),
-        paymentSession,
-      };
+      // Save the order
+      const savedOrder = await order.save();
+
+      // If online payment, create payment session
+      if (paymentMethod === PAYMENT_METHOD.ONLINE_PAYMENT) {
+        const paymentSession = await this.paymentService.createPaymentSession(savedOrder._id.toString(), userId);
+
+        return {
+          ...savedOrder.toObject(),
+          paymentSession,
+        };
+      }
+
+      return savedOrder;
+    } catch (error) {
+      console.error('Error creating order:', error);
+      throw new BadRequestException(`Failed to create order: ${error.message}`);
     }
-
-    return savedOrder;
   }
 
   async findUserOrders(userId: string, options: { page?: number; limit?: number; status?: string }) {

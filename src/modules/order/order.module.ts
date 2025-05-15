@@ -11,12 +11,18 @@ import { PaymentService } from './services/payment.service';
 import { ProductModule } from '../product/product.module';
 import { EmailModule } from '../email/email.module';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module';
+import { Product, ProductSchema } from '@/database/schemas/product.schema';
+import { JwtModule } from '@nestjs/jwt';
+import { Admin, AdminSchema } from '@/database/schemas/admin.schema';
 
 @Module({
   imports: [
+    JwtModule.register({}),
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: PaymentHistory.name, schema: PaymentHistorySchema },
+      { name: Product.name, schema: ProductSchema },
+      { name: Admin.name, schema: AdminSchema },
     ]),
     ProductModule,
     EmailModule,
