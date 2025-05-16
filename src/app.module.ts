@@ -22,6 +22,8 @@ import databaseConfig from './config/database.config';
 import serverConfig from './config/server.config';
 import emailConfig from './config/email.config';
 import { OrderModule } from './modules/order/order.module';
+import { VoucherModule } from './modules/voucher/voucher.module';
+import { ProductReviewModule } from './modules/product-review/product-review.module';
 
 @Module({
   imports: [
@@ -45,6 +47,8 @@ import { OrderModule } from './modules/order/order.module';
     EmailModule,
     BannerModule,
     OrderModule,
+    VoucherModule,
+    ProductReviewModule,
   ],
   controllers: [AppController],
   providers: [AppService],

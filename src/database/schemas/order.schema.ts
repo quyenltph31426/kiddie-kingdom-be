@@ -4,7 +4,7 @@ import { OrderStatus, PAYMENT_METHOD } from '@/shared/enums';
 
 export type OrderDocument = Order & Document;
 
-@Schema({ _id: false })
+@Schema()
 export class OrderItem {
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
   productId: Types.ObjectId;
@@ -23,6 +23,8 @@ export class OrderItem {
 
   @Prop({ type: String })
   productName: string;
+
+  _id?: string;
 }
 
 const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
