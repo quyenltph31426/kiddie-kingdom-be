@@ -191,16 +191,21 @@ export class EmailService {
   async sendOrderConfirmationEmail(email: string, username: string, order: any): Promise<boolean> {
     const subject = 'Order Confirmation';
 
+    // Register Handlebars helper for multiplication
+    handlebars.registerHelper('multiply', function (a, b) {
+      return (parseFloat(a) * parseFloat(b)).toFixed(2);
+    });
+
     const context = {
       username,
-      orderId: order.id,
+      orderId: order.orderNumber || order.id,
       orderDate: new Date(order.createdAt).toLocaleDateString(),
       items: order.items,
-      total: order.total,
+      total: order.total.toFixed(2),
       shippingAddress: order.shippingAddress,
+      orderUrl: `${this.emailConfig.frontendUrl}/orders/${order.id}`,
       year: new Date().getFullYear(),
       appName: this.emailConfig.appName,
-      orderUrl: `${this.emailConfig.frontendUrl}/orders/${order.id}`,
     };
 
     return this.sendTemplateEmail(email, subject, 'order-confirmation', context);

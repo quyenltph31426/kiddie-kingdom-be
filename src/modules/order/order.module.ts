@@ -14,6 +14,7 @@ import { AdminAuthModule } from '../admin-auth/admin-auth.module';
 import { Product, ProductSchema } from '@/database/schemas/product.schema';
 import { JwtModule } from '@nestjs/jwt';
 import { Admin, AdminSchema } from '@/database/schemas/admin.schema';
+import { User, UserSchema } from '@/database/schemas/user.schema';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { Admin, AdminSchema } from '@/database/schemas/admin.schema';
       { name: PaymentHistory.name, schema: PaymentHistorySchema },
       { name: Product.name, schema: ProductSchema },
       { name: Admin.name, schema: AdminSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     ProductModule,
     EmailModule,

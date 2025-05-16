@@ -47,17 +47,31 @@ export class ShippingAddressDto {
 }
 
 export class CreateOrderDto {
-  @ApiProperty({ description: 'Order items', type: [OrderItemDto] })
+  @ApiProperty({
+    description: 'Order items',
+    type: [OrderItemDto],
+    example: [{ productId: '6822156aa256ecdc3361a5a8', variantId: '68207426abb6f08a4d09f58b', quantity: 1 }],
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => OrderItemDto)
   items: OrderItemDto[];
 
-  @ApiProperty({ description: 'Payment method', enum: PAYMENT_METHOD })
+  @ApiProperty({ description: 'Payment method', enum: PAYMENT_METHOD, example: PAYMENT_METHOD.ONLINE_PAYMENT })
   @IsEnum(PAYMENT_METHOD)
   paymentMethod: PAYMENT_METHOD;
 
-  @ApiProperty({ description: 'Shipping address', type: ShippingAddressDto })
+  @ApiProperty({
+    description: 'Shipping address',
+    type: ShippingAddressDto,
+    example: {
+      fullName: 'Nguyen Van A',
+      address: '123 Nguyen Hue Street',
+      city: 'Ho Chi Minh City',
+      postalCode: '700000',
+      phone: '0912345678',
+    },
+  })
   @IsObject()
   @ValidateNested()
   @Type(() => ShippingAddressDto)

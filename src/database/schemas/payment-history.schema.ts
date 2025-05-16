@@ -15,7 +15,7 @@ export enum PaymentProvider {
 
 export type PaymentHistoryDocument = PaymentHistory & Document;
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'payment_history' })
 export class PaymentHistory {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;

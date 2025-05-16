@@ -40,10 +40,13 @@
       width: 100%;
       border-collapse: collapse;
     }
-    .order-table th {
-      background-color: #eee;
+    .order-table th, .order-table td {
+      border: 1px solid #ddd;
       padding: 10px;
       text-align: left;
+    }
+    .order-table th {
+      background-color: #eee;
     }
     .order-summary {
       margin-top: 20px;
@@ -68,6 +71,15 @@
       background-color: #eee;
       border-radius: 4px;
     }
+    .button {
+      display: inline-block;
+      background-color: #4a69bd;
+      color: white;
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      margin-top: 20px;
+    }
   </style>
 </head>
 <body>
@@ -80,7 +92,7 @@
       <p>Thank you for your order! We're processing it now and will ship it as soon as possible.</p>
       
       <div class="order-details">
-        <h2>Order #{{orderNumber}}</h2>
+        <h2>Order #{{orderId}}</h2>
         <p>Placed on: {{orderDate}}</p>
         
         <table class="order-table">
@@ -93,36 +105,53 @@
             </tr>
           </thead>
           <tbody>
-            {{itemsTable}}
+            {{#each items}}
+            <tr>
+              <td>{{this.name}}</td>
+              <td>{{this.quantity}}</td>
+              <td>${{this.price}}</td>
+              <td>${{multiply this.price this.quantity}}</td>
+            </tr>
+            {{/each}}
           </tbody>
         </table>
         
         <div class="order-summary">
           <div class="summary-row">
             <span>Subtotal:</span>
-            <span>{{subtotal}}</span>
+            <span>${{total}}</span>
           </div>
           <div class="summary-row">
             <span>Shipping:</span>
-            <span>{{shipping}}</span>
+            <span>$0.00</span>
           </div>
           <div class="summary-row">
             <span>Tax:</span>
-            <span>{{tax}}</span>
+            <span>Included</span>
           </div>
           <div class="summary-row total-row">
             <span>Total:</span>
-            <span>{{total}}</span>
+            <span>${{total}}</span>
           </div>
         </div>
       </div>
       
       <div class="shipping-info">
         <h3>Shipping Address</h3>
-        <p>{{shippingAddress}}</p>
+        <p>
+          {{shippingAddress.name}}<br>
+          {{shippingAddress.street}}<br>
+          {{shippingAddress.city}}, {{shippingAddress.state}} {{shippingAddress.zip}}<br>
+          {{shippingAddress.country}}<br>
+          Phone: {{shippingAddress.phone}}
+        </p>
         
         <h3>Payment Method</h3>
-        <p>{{paymentMethod}}</p>
+        <p>Online Payment (VNPay)</p>
+      </div>
+      
+      <div style="text-align: center; margin-top: 30px;">
+        <a href="{{orderUrl}}" class="button">View Order Details</a>
       </div>
       
       <p>If you have any questions about your order, please contact our customer service team.</p>

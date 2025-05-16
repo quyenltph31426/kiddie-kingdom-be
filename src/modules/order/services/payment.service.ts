@@ -9,11 +9,12 @@ import {
   PaymentStatus,
   PaymentProvider,
 } from '@/database/schemas/payment-history.schema';
+import { User, UserDocument } from '@/database/schemas/user.schema';
 import { OrderStatus, PAYMENT_METHOD } from '@/shared/enums';
 import { EmailService } from '@/modules/email/email.service';
-import * as crypto from 'crypto';
-import * as querystring from 'querystring';
-import * as moment from 'moment';
+import crypto from 'crypto';
+import querystring from 'qs';
+import moment from 'moment';
 
 @Injectable()
 export class PaymentService {
@@ -29,6 +30,7 @@ export class PaymentService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(PaymentHistory.name) private paymentHistoryModel: Model<PaymentHistoryDocument>,
+    @InjectModel(User.name) private userModel: Model<UserDocument>,
     private configService: ConfigService,
     private emailService: EmailService,
   ) {
@@ -98,6 +100,7 @@ export class PaymentService {
   }
 
   private async createVnpayPaymentUrl(order: OrderDocument): Promise<string> {
+    console.log(this.vnpayConfig);
     const tmnCode = this.vnpayConfig.tmnCode;
     const secretKey = this.vnpayConfig.hashSecret;
     const returnUrl = this.vnpayConfig.returnUrl;
@@ -106,7 +109,7 @@ export class PaymentService {
     const date = new Date();
     const createDate = moment(date).format('YYYYMMDDHHmmss');
     const orderId = `${moment(date).format('YYYYMMDDHHmmss')}_${order._id.toString()}`;
-    const amount = Math.round(order.totalAmount * 100); // chuyển thành đơn vị đồng
+    const amount = Math.round(order.totalAmount * 100);
     const orderInfo = `Payment for order ${order.orderNumber}`;
 
     const vnpParams: Record<string, string> = {
@@ -120,75 +123,75 @@ export class PaymentService {
       vnp_OrderType: 'billpayment',
       vnp_Amount: amount.toString(),
       vnp_ReturnUrl: returnUrl,
-      vnp_IpAddr: '127.0.0.1', // kiểm tra lại IP khi triển khai thực tế
+      vnp_IpAddr: '127.0.0.1',
       vnp_CreateDate: createDate,
     };
 
     const sortedParams = this.sortObject(vnpParams);
 
-    const signData = Object.entries(sortedParams)
-      .map(([key, value]) => `${key}=${value}`)
-      .join('&');
-
-    // Tạo chữ ký
+    const signData = querystring.stringify(sortedParams, { encode: false });
     const hmac = crypto.createHmac('sha512', secretKey);
     const signed = hmac.update(signData, 'utf8').digest('hex');
 
-    console.log('Sign Data:', signData);
-    console.log('Signed:', signed);
-
     sortedParams['vnp_SecureHash'] = signed;
 
-    const queryString = querystring.stringify(sortedParams);
-
-    console.log('Query String:', queryString);
+    const queryString = querystring.stringify(sortedParams, { encode: false });
 
     return `${vnpUrl}?${queryString}`;
   }
 
   private sortObject(obj: any): any {
-    const sorted: any = {};
-    const keys = Object.keys(obj).sort();
-
-    for (const key of keys) {
-      if (obj[key] !== null && obj[key] !== undefined) {
-        sorted[key] = obj[key];
+    let sorted = {};
+    let str = [];
+    let key;
+    for (key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        str.push(encodeURIComponent(key));
       }
     }
-
+    str.sort();
+    for (key = 0; key < str.length; key++) {
+      sorted[str[key]] = encodeURIComponent(obj[str[key]]).replace(/%20/g, '+');
+    }
     return sorted;
   }
 
   async handleVnpayReturn(query: any): Promise<any> {
     try {
+      this.logger.log(`VNPay return received with params: ${JSON.stringify(query)}`);
+
       const vnpParams = { ...query };
       const secureHash = vnpParams['vnp_SecureHash'];
 
-      // Remove hash from params
       delete vnpParams['vnp_SecureHash'];
       delete vnpParams['vnp_SecureHashType'];
 
-      // Sort params
       const sortedParams = this.sortObject(vnpParams);
 
-      // Verify signature
-      const signData = querystring.stringify(sortedParams);
+      const signData = querystring.stringify(sortedParams, { encode: false });
+
       const hmac = crypto.createHmac('sha512', this.vnpayConfig.hashSecret);
       const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 
-      console.log(signed, secureHash);
+      this.logger.log(`Generated signature: ${signed}`);
+      this.logger.log(`Received signature: ${secureHash}`);
 
-      // Check if signature is valid
       if (secureHash !== signed) {
         throw new BadRequestException('Invalid signature');
       }
 
       // Get transaction reference
       const txnRef = vnpParams['vnp_TxnRef'];
+      if (!txnRef || !txnRef.includes('_')) {
+        throw new BadRequestException('Invalid transaction reference format');
+      }
+
       const orderId = txnRef.split('_')[1]; // Extract order ID from txnRef
+      this.logger.log(`Processing payment for order ID: ${orderId}`);
 
       // Get response code
       const responseCode = vnpParams['vnp_ResponseCode'];
+      this.logger.log(`VNPay response code: ${responseCode}`);
 
       // Find payment history
       const paymentHistory = await this.paymentHistoryModel.findOne({
@@ -196,12 +199,16 @@ export class PaymentService {
       });
 
       if (!paymentHistory) {
+        this.logger.error(`Payment record not found for order ID: ${orderId}`);
         throw new NotFoundException('Payment record not found');
       }
 
       // Update payment history based on response code
       if (responseCode === '00') {
         // Payment successful
+        this.logger.log(`Payment successful for order ID: ${orderId}`);
+
+        // Update payment history
         paymentHistory.status = PaymentStatus.COMPLETED;
         paymentHistory.completedAt = new Date();
         paymentHistory.paymentDetails = {
@@ -211,33 +218,40 @@ export class PaymentService {
           cardType: vnpParams['vnp_CardType'],
           payDate: vnpParams['vnp_PayDate'],
         };
-        await paymentHistory.save();
+
+        const savedPaymentHistory = await paymentHistory.save();
+        this.logger.log(`Payment history updated: ${JSON.stringify(savedPaymentHistory)}`);
 
         // Update order
         const order = await this.orderModel.findById(orderId);
-        if (order) {
-          order.status = OrderStatus.COMPLETED;
-          order.paidAt = new Date();
-          await order.save();
+        if (!order) {
+          this.logger.error(`Order not found for ID: ${orderId}`);
+          throw new NotFoundException('Order not found');
+        }
 
-          // Send order confirmation email
-          try {
-            // Fetch user details and send email
-            // This is a placeholder - implement according to your user model
-            await this.emailService.sendOrderConfirmationEmail(
-              'user@example.com', // Replace with actual user email
-              'Customer', // Replace with actual username
-              {
-                id: order._id.toString(),
-                createdAt: order.createdAt,
-                items: order.items,
-                total: order.totalAmount,
-                shippingAddress: order.shippingAddress,
-              },
-            );
-          } catch (emailError) {
-            this.logger.error(`Failed to send order confirmation email: ${emailError.message}`);
-          }
+        order.status = OrderStatus.COMPLETED;
+        order.paidAt = new Date();
+
+        const savedOrder = await order.save();
+        this.logger.log(`Order updated: ${JSON.stringify(savedOrder)}`);
+
+        // Get user information for email
+        const user = await this.userModel.findById(order.userId);
+        const userEmail = user ? user.email : 'user@example.com';
+        const userName = user ? user.username : 'Customer';
+
+        // Send confirmation email
+        try {
+          await this.emailService.sendOrderConfirmationEmail(userEmail, userName, {
+            id: order._id.toString(),
+            createdAt: order.createdAt,
+            items: order.items,
+            total: order.totalAmount,
+            shippingAddress: order.shippingAddress,
+          });
+          this.logger.log(`Order confirmation email sent to: ${userEmail}`);
+        } catch (emailError) {
+          this.logger.error(`Failed to send order confirmation email: ${emailError.message}`);
         }
 
         // Redirect to success page
@@ -248,9 +262,13 @@ export class PaymentService {
         };
       } else {
         // Payment failed
+        this.logger.log(`Payment failed for order ID: ${orderId} with code: ${responseCode}`);
+
         paymentHistory.status = PaymentStatus.FAILED;
         paymentHistory.failureReason = `VNPay error code: ${responseCode}`;
-        await paymentHistory.save();
+
+        const savedPaymentHistory = await paymentHistory.save();
+        this.logger.log(`Payment history updated: ${JSON.stringify(savedPaymentHistory)}`);
 
         // Redirect to cancel page
         return {

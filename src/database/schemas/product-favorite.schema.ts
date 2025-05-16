@@ -3,7 +3,7 @@ import { Document, Types } from 'mongoose';
 
 export type ProductFavoriteDocument = ProductFavorite & Document;
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'product_favorite' })
 export class ProductFavorite {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
