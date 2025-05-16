@@ -24,6 +24,7 @@
     "postinstall": "husky"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@nestjs/cache-manager": "^2.3.0",
     "@nestjs/common": "^10.0.0",
     "@nestjs/config": "^3.3.0",
