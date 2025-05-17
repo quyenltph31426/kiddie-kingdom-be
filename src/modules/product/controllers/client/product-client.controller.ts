@@ -94,9 +94,9 @@ export class ProductClientController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiBearerAuth() // Optional auth
-  getNewArrivals(@Request() req, @Query('limit') limit: number = 10) {
+  getNewArrivals(@Request() req, @Query('limit') limit: number = 10, @Query('page') page: number = 1) {
     const userId = req.user?.sub || null;
-    return this.productClientService.getNewArrivalProducts(limit, userId);
+    return this.productClientService.getNewArrivalProducts(limit, page, userId);
   }
 
   @Get('on-sale')
@@ -104,9 +104,9 @@ export class ProductClientController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiBearerAuth() // Optional auth
-  getOnSale(@Request() req, @Query('limit') limit: number = 10) {
+  getOnSale(@Request() req, @Query('limit') limit: number = 10, @Query('page') page: number = 1) {
     const userId = req.user?.sub || null;
-    return this.productClientService.getOnSaleProducts(limit, userId);
+    return this.productClientService.getOnSaleProducts(limit, page, userId);
   }
 
   @Get(':idOrSlug')
