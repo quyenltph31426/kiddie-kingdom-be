@@ -15,7 +15,23 @@ export class UserAddressService {
       return { addresses: [] };
     }
 
-    return { addresses: userAddress.addresses };
+    return userAddress.addresses;
+  }
+
+  async getAddressById(userId: string, addressId: string) {
+    const userAddress = await this.userAddressModel.findOne({ userId: new Types.ObjectId(userId) });
+
+    if (!userAddress) {
+      throw new NotFoundException('User addresses not found');
+    }
+
+    const address = userAddress.addresses.find((addr) => addr._id.toString() === addressId);
+
+    if (!address) {
+      throw new NotFoundException('Address not found');
+    }
+
+    return address;
   }
 
   async addAddress(userId: string, addressDto: AddAddressDto) {

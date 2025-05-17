@@ -9,6 +9,7 @@ import { OrderService } from './services/order.service';
 import { OrderAdminService } from './services/order-admin.service';
 import { PaymentService } from './services/payment.service';
 import { ProductModule } from '../product/product.module';
+import { UserModule } from '../user/user.module';
 import { EmailModule } from '../email/email.module';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module';
 import { Product, ProductSchema } from '@/database/schemas/product.schema';
@@ -29,6 +30,7 @@ import { User, UserSchema } from '@/database/schemas/user.schema';
     ProductModule,
     EmailModule,
     AdminAuthModule,
+    UserModule,
   ],
   controllers: [OrderClientController, OrderAdminController, PaymentController],
   providers: [OrderService, OrderAdminService, PaymentService],

@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { OrderStatus, PAYMENT_METHOD } from '@/shared/enums';
+import { PaymentStatus, ShippingStatus, PAYMENT_METHOD } from '@/shared/enums';
 
 export type OrderDocument = Order & Document;
 
@@ -51,10 +51,17 @@ export class Order {
 
   @Prop({
     type: String,
-    enum: Object.values(OrderStatus),
-    default: OrderStatus.TO_PAY,
+    enum: Object.values(PaymentStatus),
+    default: PaymentStatus.PENDING,
   })
-  status: string;
+  paymentStatus: string;
+
+  @Prop({
+    type: String,
+    enum: Object.values(ShippingStatus),
+    default: ShippingStatus.PENDING,
+  })
+  shippingStatus: string;
 
   @Prop({
     type: String,
@@ -66,13 +73,25 @@ export class Order {
   @Prop({ type: Date })
   paidAt: Date;
 
+  @Prop({ type: String })
+  trackingNumber: string;
+
+  @Prop({ type: Date })
+  shippedAt: Date;
+
+  @Prop({ type: Date })
+  deliveredAt: Date;
+
   @Prop({ type: Object })
   shippingAddress: {
     fullName: string;
-    address: string;
-    city: string;
-    postalCode: string;
     phone: string;
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    district: string;
+    ward?: string;
+    postalCode?: string;
   };
 
   // Explicitly define timestamps

@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsArray, IsEnum, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PAYMENT_METHOD } from '@/shared/enums';
@@ -25,25 +25,40 @@ export class ShippingAddressDto {
   @IsNotEmpty()
   fullName: string;
 
-  @ApiProperty({ description: 'Address' })
-  @IsString()
-  @IsNotEmpty()
-  address: string;
-
-  @ApiProperty({ description: 'City' })
-  @IsString()
-  @IsNotEmpty()
-  city: string;
-
-  @ApiProperty({ description: 'Postal code' })
-  @IsString()
-  @IsNotEmpty()
-  postalCode: string;
-
   @ApiProperty({ description: 'Phone number' })
   @IsString()
   @IsNotEmpty()
   phone: string;
+
+  @ApiProperty({ description: 'Address line 1' })
+  @IsString()
+  @IsNotEmpty()
+  addressLine1: string;
+
+  @ApiPropertyOptional({ description: 'Address line 2' })
+  @IsString()
+  @IsOptional()
+  addressLine2?: string;
+
+  @ApiProperty({ description: 'City/Province' })
+  @IsString()
+  @IsNotEmpty()
+  city: string;
+
+  @ApiProperty({ description: 'District' })
+  @IsString()
+  @IsNotEmpty()
+  district: string;
+
+  @ApiPropertyOptional({ description: 'Ward' })
+  @IsString()
+  @IsOptional()
+  ward?: string;
+
+  @ApiPropertyOptional({ description: 'Postal code' })
+  @IsString()
+  @IsOptional()
+  postalCode?: string;
 }
 
 export class CreateOrderDto {
@@ -65,11 +80,14 @@ export class CreateOrderDto {
     description: 'Shipping address',
     type: ShippingAddressDto,
     example: {
-      fullName: 'Nguyen Van A',
-      address: '123 Nguyen Hue Street',
-      city: 'Ho Chi Minh City',
-      postalCode: '700000',
-      phone: '0912345678',
+      fullName: 'Huu Nguyen',
+      phone: '0788062672',
+      addressLine1: 'Var ha noi',
+      addressLine2: 'aa',
+      city: 'a',
+      district: 'ss',
+      ward: 'ss',
+      postalCode: '123',
     },
   })
   @IsObject()
