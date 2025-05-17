@@ -42,7 +42,7 @@ export class OrderAdminService {
 
     if (search) {
       query.$or = [
-        { orderNumber: { $regex: search, $options: 'i' } },
+        { orderCode: { $regex: search, $options: 'i' } },
         { 'shippingAddress.fullName': { $regex: search, $options: 'i' } },
         { 'shippingAddress.phone': { $regex: search, $options: 'i' } },
       ];
@@ -228,7 +228,7 @@ export class OrderAdminService {
       this.paymentHistoryModel
         .find(query)
         .populate('userId', 'email username')
-        .populate('orderId', 'orderNumber')
+        .populate('orderId', 'orderCode')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
