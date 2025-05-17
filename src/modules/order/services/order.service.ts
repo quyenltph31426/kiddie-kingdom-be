@@ -3,7 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from '@/database/schemas/order.schema';
 import { CreateOrderDto } from '../dto/create-order.dto';
-import { OrderStatus, PAYMENT_METHOD } from '@/shared/enums';
+import { OrderStatus, PAYMENT_METHOD, PaymentStatus, ShippingStatus } from '@/shared/enums';
 import { PaymentService } from './payment.service';
 import { Product, ProductDocument } from '@/database/schemas/product.schema';
 
@@ -117,14 +117,24 @@ export class OrderService {
         .padStart(4, '0');
       const orderNumber = `ORD-${timestamp}${random}`;
 
-      // Create the order
+      // Create the order with updated shipping address structure
       const order = new this.orderModel({
         userId: new Types.ObjectId(userId),
         items: orderItems,
         paymentMethod,
-        shippingAddress,
+        shippingAddress: {
+          fullName: shippingAddress.fullName,
+          phone: shippingAddress.phone,
+          addressLine1: shippingAddress.addressLine1,
+          addressLine2: shippingAddress.addressLine2,
+          city: shippingAddress.city,
+          district: shippingAddress.district,
+          ward: shippingAddress.ward,
+          postalCode: shippingAddress.postalCode,
+        },
         voucherId: voucherId && Types.ObjectId.isValid(voucherId) ? new Types.ObjectId(voucherId) : undefined,
-        status: OrderStatus.TO_PAY,
+        paymentStatus: PaymentStatus.PENDING,
+        shippingStatus: ShippingStatus.PENDING,
         totalAmount: totalAmount,
         orderNumber: orderNumber,
         discountAmount: 0, // Set default discount amount
@@ -150,14 +160,26 @@ export class OrderService {
     }
   }
 
-  async findUserOrders(userId: string, options: { page?: number; limit?: number; status?: string }) {
-    const { page = 1, limit = 10, status } = options;
+  async findUserOrders(
+    userId: string,
+    options: {
+      page?: number;
+      limit?: number;
+      paymentStatus?: string;
+      shippingStatus?: string;
+    },
+  ): Promise<any> {
+    const { page = 1, limit = 10, paymentStatus, shippingStatus } = options;
     const skip = (page - 1) * limit;
 
     const query: any = { userId: new Types.ObjectId(userId) };
 
-    if (status) {
-      query.status = status;
+    if (paymentStatus) {
+      query.paymentStatus = paymentStatus;
+    }
+
+    if (shippingStatus) {
+      query.shippingStatus = shippingStatus;
     }
 
     const [orders, total] = await Promise.all([
@@ -176,7 +198,7 @@ export class OrderService {
     };
   }
 
-  async findUserOrder(id: string, userId: string): Promise<Order> {
+  async getOrderDetails(id: string, userId: string): Promise<Order> {
     const order = await this.orderModel.findOne({
       _id: new Types.ObjectId(id),
       userId: new Types.ObjectId(userId),
@@ -199,12 +221,14 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
-    // Only allow cancellation of orders that are in TO_PAY status
-    if (order.status !== OrderStatus.TO_PAY) {
-      throw new BadRequestException('Cannot cancel order in current status');
+    // Only allow cancellation of orders that are in PENDING payment status
+    if (order.paymentStatus !== PaymentStatus.PENDING) {
+      throw new BadRequestException('Cannot cancel order in current payment status');
     }
 
-    order.status = OrderStatus.CANCELED;
+    order.paymentStatus = PaymentStatus.FAILED;
+    order.shippingStatus = ShippingStatus.CANCELED;
+
     return order.save();
   }
 
@@ -218,7 +242,7 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
-    if (order.status !== OrderStatus.TO_PAY) {
+    if (order.paymentStatus !== PaymentStatus.PENDING) {
       throw new BadRequestException('Order is not in a payable state');
     }
 

@@ -10,7 +10,7 @@ import {
   PaymentProvider,
 } from '@/database/schemas/payment-history.schema';
 import { User, UserDocument } from '@/database/schemas/user.schema';
-import { OrderStatus, PAYMENT_METHOD } from '@/shared/enums';
+import { PAYMENT_METHOD, ShippingStatus } from '@/shared/enums';
 import { EmailService } from '@/modules/email/email.service';
 import crypto from 'crypto';
 import querystring from 'qs';
@@ -62,7 +62,7 @@ export class PaymentService {
         throw new NotFoundException('Order not found');
       }
 
-      if (order.status !== OrderStatus.TO_PAY) {
+      if (order.paymentStatus !== PaymentStatus.PENDING) {
         throw new BadRequestException('Order is not in a payable state');
       }
 
@@ -229,7 +229,7 @@ export class PaymentService {
           throw new NotFoundException('Order not found');
         }
 
-        order.status = OrderStatus.COMPLETED;
+        order.paymentStatus = PaymentStatus.COMPLETED;
         order.paidAt = new Date();
 
         const savedOrder = await order.save();
@@ -270,6 +270,15 @@ export class PaymentService {
         const savedPaymentHistory = await paymentHistory.save();
         this.logger.log(`Payment history updated: ${JSON.stringify(savedPaymentHistory)}`);
 
+        // Update order payment status to FAILED
+        const order = await this.orderModel.findById(orderId);
+        if (order) {
+          order.paymentStatus = PaymentStatus.FAILED;
+          order.shippingStatus = ShippingStatus.CANCELED;
+          await order.save();
+          this.logger.log(`Order status updated to payment failed`);
+        }
+
         // Redirect to cancel page
         return {
           success: false,
@@ -295,7 +304,8 @@ export class PaymentService {
       return {
         success: true,
         orderId: order._id,
-        status: order.status,
+        paymentStatus: order.paymentStatus,
+        shippingStatus: order.shippingStatus,
         message: 'Payment processed successfully',
       };
     } catch (error) {
@@ -315,12 +325,73 @@ export class PaymentService {
       return {
         success: false,
         orderId: order._id,
-        status: order.status,
+        paymentStatus: order.paymentStatus,
+        shippingStatus: order.shippingStatus,
         message: 'Payment was canceled',
       };
     } catch (error) {
       this.logger.error(`Cancel redirect handling failed: ${error.message}`, error.stack);
       throw new BadRequestException(`Cancel handling failed: ${error.message}`);
     }
+  }
+
+  async processPaymentCallback(paymentData: any): Promise<any> {
+    // Extract orderId from paymentData
+    const orderId = paymentData.orderId;
+
+    // Update payment history
+    const paymentHistory = await this.paymentHistoryModel.findOne({
+      orderId: new Types.ObjectId(orderId),
+    });
+
+    if (!paymentHistory) {
+      this.logger.error(`Payment history not found for order ID: ${orderId}`);
+      throw new NotFoundException('Payment history not found');
+    }
+
+    paymentHistory.status = PaymentStatus.COMPLETED;
+    paymentHistory.transactionData = paymentData;
+    paymentHistory.completedAt = new Date();
+
+    const savedPaymentHistory = await paymentHistory.save();
+    this.logger.log(`Payment history updated: ${JSON.stringify(savedPaymentHistory)}`);
+
+    // Update order
+    const order = await this.orderModel.findById(orderId);
+    if (!order) {
+      this.logger.error(`Order not found for ID: ${orderId}`);
+      throw new NotFoundException('Order not found');
+    }
+
+    order.paymentStatus = PaymentStatus.COMPLETED;
+    order.paidAt = new Date();
+
+    const savedOrder = await order.save();
+    this.logger.log(`Order updated: ${JSON.stringify(savedOrder)}`);
+
+    // Get user information for email
+    const user = await this.userModel.findById(order.userId);
+    const userEmail = user ? user.email : 'user@example.com';
+    const userName = user ? user.username : 'Customer';
+
+    // Send confirmation email
+    try {
+      await this.emailService.sendOrderConfirmationEmail(userEmail, userName, {
+        id: order._id.toString(),
+        createdAt: order.createdAt,
+        items: order.items,
+        total: order.totalAmount,
+        shippingAddress: order.shippingAddress,
+      });
+      this.logger.log(`Order confirmation email sent to: ${userEmail}`);
+    } catch (emailError) {
+      this.logger.error(`Failed to send order confirmation email: ${emailError.message}`);
+    }
+
+    return {
+      success: true,
+      orderId: order._id,
+      message: 'Payment processed successfully',
+    };
   }
 }

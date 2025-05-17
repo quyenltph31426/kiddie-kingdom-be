@@ -3,7 +3,7 @@ import { Document, Types } from 'mongoose';
 
 export type ProductReviewDocument = ProductReview & Document;
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'product_review' })
 export class ProductReview {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;

@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from '@/database/schemas/order.schema';
 import { PaymentHistory, PaymentHistoryDocument } from '@/database/schemas/payment-history.schema';
 import { UpdateOrderDto } from '../dto/update-order.dto';
+import { PaymentStatus, ShippingStatus } from '@/shared/enums';
 
 @Injectable()
 export class OrderAdminService {
@@ -16,18 +17,23 @@ export class OrderAdminService {
     page?: number;
     limit?: number;
     search?: string;
-    status?: string;
+    paymentStatus?: string;
+    shippingStatus?: string;
     paymentMethod?: string;
     startDate?: string;
     endDate?: string;
   }) {
-    const { page = 1, limit = 10, search, status, paymentMethod, startDate, endDate } = options;
+    const { page = 1, limit = 10, search, paymentStatus, shippingStatus, paymentMethod, startDate, endDate } = options;
     const skip = (page - 1) * limit;
 
     const query: any = {};
 
-    if (status) {
-      query.status = status;
+    if (paymentStatus) {
+      query.paymentStatus = paymentStatus;
+    }
+
+    if (shippingStatus) {
+      query.shippingStatus = shippingStatus;
     }
 
     if (paymentMethod) {
@@ -88,8 +94,39 @@ export class OrderAdminService {
     }
 
     // Update order fields
-    if (updateOrderDto.status) {
-      order.status = updateOrderDto.status;
+    if (updateOrderDto.paymentStatus) {
+      order.paymentStatus = updateOrderDto.paymentStatus;
+
+      // If payment is completed, set paidAt
+      if (updateOrderDto.paymentStatus === PaymentStatus.COMPLETED && !order.paidAt) {
+        order.paidAt = new Date();
+      }
+    }
+
+    if (updateOrderDto.shippingStatus) {
+      order.shippingStatus = updateOrderDto.shippingStatus;
+
+      // If order is shipped, set shippedAt
+      if (updateOrderDto.shippingStatus === ShippingStatus.SHIPPED && !order.shippedAt) {
+        order.shippedAt = updateOrderDto.shippedAt || new Date();
+      }
+
+      // If order is delivered, set deliveredAt
+      if (updateOrderDto.shippingStatus === ShippingStatus.DELIVERED && !order.deliveredAt) {
+        order.deliveredAt = updateOrderDto.deliveredAt || new Date();
+      }
+    }
+
+    if (updateOrderDto.trackingNumber) {
+      order.trackingNumber = updateOrderDto.trackingNumber;
+    }
+
+    if (updateOrderDto.shippedAt) {
+      order.shippedAt = updateOrderDto.shippedAt;
+    }
+
+    if (updateOrderDto.deliveredAt) {
+      order.deliveredAt = updateOrderDto.deliveredAt;
     }
 
     return order.save();
@@ -128,10 +165,16 @@ export class OrderAdminService {
     // Get total orders count
     const totalOrders = await this.orderModel.countDocuments(query);
 
-    // Get orders by status
-    const ordersByStatus = await this.orderModel.aggregate([
+    // Get orders by payment status
+    const ordersByPaymentStatus = await this.orderModel.aggregate([
       { $match: query },
-      { $group: { _id: '$status', count: { $sum: 1 } } },
+      { $group: { _id: '$paymentStatus', count: { $sum: 1 } } },
+    ]);
+
+    // Get orders by shipping status
+    const ordersByShippingStatus = await this.orderModel.aggregate([
+      { $match: query },
+      { $group: { _id: '$shippingStatus', count: { $sum: 1 } } },
     ]);
 
     // Get orders by payment method
@@ -140,43 +183,34 @@ export class OrderAdminService {
       { $group: { _id: '$paymentMethod', count: { $sum: 1 } } },
     ]);
 
-    // Get total revenue
+    // Calculate total revenue from completed orders
     const revenueData = await this.orderModel.aggregate([
-      { $match: { ...query, status: 'COMPLETED' } },
+      {
+        $match: {
+          ...query,
+          paymentStatus: PaymentStatus.COMPLETED,
+        },
+      },
       { $group: { _id: null, total: { $sum: '$totalAmount' } } },
     ]);
 
     const totalRevenue = revenueData.length > 0 ? revenueData[0].total : 0;
 
-    // Get daily revenue for chart
-    const dailyRevenue = await this.orderModel.aggregate([
-      { $match: { ...query, status: 'COMPLETED' } },
-      {
-        $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-          total: { $sum: '$totalAmount' },
-          count: { $sum: 1 },
-        },
-      },
-      { $sort: { _id: 1 } },
-    ]);
-
     return {
       totalOrders,
-      totalRevenue,
-      ordersByStatus: ordersByStatus.reduce((acc, curr) => {
-        acc[curr._id] = curr.count;
-        return acc;
-      }, {}),
-      ordersByPaymentMethod: ordersByPaymentMethod.reduce((acc, curr) => {
-        acc[curr._id] = curr.count;
-        return acc;
-      }, {}),
-      dailyRevenue: dailyRevenue.map((item) => ({
-        date: item._id,
-        revenue: item.total,
-        orders: item.count,
+      ordersByPaymentStatus: ordersByPaymentStatus.map((item) => ({
+        status: item._id,
+        count: item.count,
       })),
+      ordersByShippingStatus: ordersByShippingStatus.map((item) => ({
+        status: item._id,
+        count: item.count,
+      })),
+      ordersByPaymentMethod: ordersByPaymentMethod.map((item) => ({
+        method: item._id,
+        count: item.count,
+      })),
+      totalRevenue,
     };
   }
 

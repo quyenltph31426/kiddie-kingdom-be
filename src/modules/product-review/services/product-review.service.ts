@@ -8,6 +8,11 @@ import { CreateProductReviewDto } from '../dto/create-product-review.dto';
 import { UpdateProductReviewDto } from '../dto/update-product-review.dto';
 import { AdminUpdateReviewDto } from '../dto/admin-update-review.dto';
 
+enum PaymentStatus {
+  COMPLETED = 'COMPLETED',
+  // Add other payment statuses if needed
+}
+
 @Injectable()
 export class ProductReviewService {
   constructor(
@@ -36,7 +41,7 @@ export class ProductReviewService {
     }
 
     // Check if order is completed (paid)
-    if (order.status !== 'COMPLETED') {
+    if (order.paymentStatus !== PaymentStatus.COMPLETED) {
       throw new BadRequestException('You can only review products from completed orders');
     }
 
@@ -229,7 +234,7 @@ export class ProductReviewService {
     // Find completed orders for the user
     const completedOrders = await this.orderModel.find({
       userId: new Types.ObjectId(userId),
-      status: 'COMPLETED',
+      paymentStatus: PaymentStatus.COMPLETED,
     });
 
     if (!completedOrders.length) {
@@ -265,14 +270,9 @@ export class ProductReviewService {
     });
 
     // Get product details for reviewable products
-    const productIds = [...new Set(reviewableProducts.map((item) => item.productId.toString()))];
-
-    if (!productIds.length) {
-      return [];
-    }
-
+    const productIds = [...new Set(reviewableProducts.map((item) => item.productId))];
     const products = await this.productModel.find({
-      _id: { $in: productIds.map((id) => new Types.ObjectId(id)) },
+      _id: { $in: productIds },
     });
 
     const productMap = new Map();
@@ -292,7 +292,7 @@ export class ProductReviewService {
           orderItemId: item.orderItemId,
           name: product.name,
           image: product.images && product.images.length > 0 ? product.images[0] : null,
-          slug: product.slug,
+          price: product.price,
         };
       })
       .filter(Boolean);

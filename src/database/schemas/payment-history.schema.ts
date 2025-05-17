@@ -49,6 +49,9 @@ export class PaymentHistory {
   @Prop({ type: Object })
   paymentDetails: Record<string, any>;
 
+  @Prop({ type: Object })
+  transactionData: Record<string, any>;
+
   @Prop({ type: String })
   failureReason: string;
 

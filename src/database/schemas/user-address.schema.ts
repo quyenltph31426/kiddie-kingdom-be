@@ -37,7 +37,7 @@ export class AddressDetails {
 
 const AddressDetailsSchema = SchemaFactory.createForClass(AddressDetails);
 
-@Schema({ timestamps: true })
+@Schema({ timestamps: true, collection: 'user_address' })
 export class UserAddress {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   userId: Types.ObjectId;

@@ -2,7 +2,7 @@ import { Controller, Get, Patch, Param, Delete, Query, UseGuards, Body } from '@
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AdminAuthGuard } from '@/modules/admin-auth/guards/admin-auth.guard';
 import { AdminRolesAllowed } from '@/shared/decorator/adminRoles.decorator';
-import { AdminRoles } from '@/shared/enums';
+import { AdminRoles, PAYMENT_METHOD, PaymentStatus, ShippingStatus } from '@/shared/enums';
 import { OrderAdminService } from '../../services/order-admin.service';
 import { UpdateOrderDto } from '../../dto/update-order.dto';
 
@@ -18,15 +18,17 @@ export class OrderAdminController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String })
-  @ApiQuery({ name: 'status', required: false, enum: ['TO_PAY', 'COMPLETED', 'CANCELED', 'REFUND', 'EXPIRED'] })
-  @ApiQuery({ name: 'paymentMethod', required: false, enum: ['CASH_ON_DELIVERY', 'ONLINE_PAYMENT'] })
+  @ApiQuery({ name: 'paymentStatus', required: false, enum: Object.values(PaymentStatus) })
+  @ApiQuery({ name: 'shippingStatus', required: false, enum: Object.values(ShippingStatus) })
+  @ApiQuery({ name: 'paymentMethod', required: false, enum: Object.values(PAYMENT_METHOD) })
   @ApiQuery({ name: 'startDate', required: false, type: String })
   @ApiQuery({ name: 'endDate', required: false, type: String })
   findAll(
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
     @Query('search') search?: string,
-    @Query('status') status?: string,
+    @Query('paymentStatus') paymentStatus?: string,
+    @Query('shippingStatus') shippingStatus?: string,
     @Query('paymentMethod') paymentMethod?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
@@ -35,7 +37,8 @@ export class OrderAdminController {
       page,
       limit,
       search,
-      status,
+      paymentStatus,
+      shippingStatus,
       paymentMethod,
       startDate,
       endDate,
