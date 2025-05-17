@@ -85,7 +85,7 @@ export class PaymentService {
         transactionId: transactionId,
         paymentDetails: {
           orderId: order._id.toString(),
-          orderInfo: `Payment for order ${order.orderNumber}`,
+          orderInfo: `Payment for order ${order.orderCode}`,
         },
       });
 
@@ -110,7 +110,7 @@ export class PaymentService {
     const createDate = moment(date).format('YYYYMMDDHHmmss');
     const orderId = `${moment(date).format('YYYYMMDDHHmmss')}_${order._id.toString()}`;
     const amount = Math.round(order.totalAmount * 100);
-    const orderInfo = `Payment for order ${order.orderNumber}`;
+    const orderInfo = `Payment for order ${order.orderCode}`;
 
     const vnpParams: Record<string, string> = {
       vnp_Version: '2.1.0',

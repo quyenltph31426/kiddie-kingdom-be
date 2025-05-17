@@ -21,9 +21,6 @@ export class OrderItem {
   @Prop({ required: true })
   price: number;
 
-  @Prop({ type: String })
-  productName: string;
-
   _id?: string;
 }
 
@@ -35,7 +32,7 @@ export class Order {
   userId: Types.ObjectId;
 
   @Prop({ required: true, unique: true })
-  orderNumber: string;
+  orderCode: string;
 
   @Prop({ type: [OrderItemSchema], default: [] })
   items: OrderItem[];
@@ -108,7 +105,7 @@ OrderSchema.pre('save', function (next) {
     const random = Math.floor(Math.random() * 10000)
       .toString()
       .padStart(4, '0');
-    this.orderNumber = `ORD-${timestamp}${random}`;
+    this.orderCode = `ORDER-${timestamp}-${random}`;
   }
   next();
 });

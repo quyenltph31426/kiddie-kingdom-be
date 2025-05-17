@@ -115,7 +115,7 @@ export class OrderService {
       const random = Math.floor(Math.random() * 10000)
         .toString()
         .padStart(4, '0');
-      const orderNumber = `ORD-${timestamp}${random}`;
+      const orderCode = `ORD-${timestamp}${random}`;
 
       // Create the order with updated shipping address structure
       const order = new this.orderModel({
@@ -136,7 +136,7 @@ export class OrderService {
         paymentStatus: PaymentStatus.PENDING,
         shippingStatus: ShippingStatus.PENDING,
         totalAmount: totalAmount,
-        orderNumber: orderNumber,
+        orderCode: orderCode,
         discountAmount: 0, // Set default discount amount
       });
 
@@ -187,8 +187,54 @@ export class OrderService {
       this.orderModel.countDocuments(query),
     ]);
 
+    const productIds = orders.flatMap((order) => order.items.map((item) => item.productId));
+
+    const products = await this.productModel
+      .find({
+        _id: { $in: productIds },
+      })
+      .select('name images variants');
+
+    const productMap = new Map();
+    products.forEach((product) => {
+      productMap.set(product._id.toString(), {
+        name: product.name,
+        image: product.images && product.images.length > 0 ? product.images[0] : null,
+        variants: product.variants || [],
+      });
+    });
+
+    const enrichedOrders = orders.map((order) => {
+      const orderObj = order.toObject ? order.toObject() : order;
+
+      const enrichedItems = orderObj.items.map((item) => {
+        const productInfo = productMap.get(item.productId.toString());
+
+        if (!productInfo) {
+          return item;
+        }
+
+        let variantInfo = null;
+        if (item.variantId && productInfo.variants) {
+          variantInfo = productInfo.variants.find((variant) => variant._id.toString() === item.variantId.toString());
+        }
+
+        return {
+          ...item,
+          productName: productInfo.name,
+          productImage: productInfo.image,
+          attributes: variantInfo ? variantInfo.attributes : {},
+        };
+      });
+
+      return {
+        ...orderObj,
+        items: enrichedItems,
+      };
+    });
+
     return {
-      items: orders,
+      items: enrichedOrders,
       meta: {
         total,
         page,

@@ -198,7 +198,7 @@ export class EmailService {
 
     const context = {
       username,
-      orderId: order.orderNumber || order.id,
+      orderId: order.orderCode || order.id,
       orderDate: new Date(order.createdAt).toLocaleDateString(),
       items: order.items,
       total: order.total.toFixed(2),
