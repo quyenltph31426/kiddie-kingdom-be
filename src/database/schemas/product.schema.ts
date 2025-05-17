@@ -92,7 +92,7 @@ export class Product {
   originalPrice: number;
 
   @Prop({ type: Object })
-  attributes?: Record<string, string>;
+  specifications?: Record<string, string>;
 
   // Don't use getter/setter for virtual properties
   // This can cause infinite recursion

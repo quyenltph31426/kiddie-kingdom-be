@@ -52,19 +52,6 @@ export class ProductClientService {
       query.brandId = new Types.ObjectId(brandId);
     }
 
-    // Validate price values before using them in the query
-    // if (minPrice || maxPrice) {
-    //   query['variants.price'] = {};
-
-    //   if (minPrice) {
-    //     query['variants.price'].$gte = Number(minPrice);
-    //   }
-
-    //   if (maxPrice) {
-    //     query['variants.price'].$lte = Number(maxPrice);
-    //   }
-    // }
-
     if (tags && tags.length > 0) {
       query.tags = { $in: tags };
     }
@@ -82,8 +69,44 @@ export class ProductClientService {
     const sort: any = {};
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
-    const [items, total] = await Promise.all([
-      this.productModel
+    // Filter by price using aggregation pipeline
+    let pipeline = [];
+
+    // Start with matching basic criteria
+    pipeline.push({ $match: query });
+
+    // Add price filtering
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      pipeline.push(
+        // Calculate current price for each product
+        {
+          $addFields: {
+            currentPrice: {
+              $min: '$variants.price',
+            },
+          },
+        },
+      );
+
+      // Apply price filters
+      const priceFilter: any = {};
+      if (minPrice !== undefined) {
+        priceFilter.$gte = minPrice;
+      }
+      if (maxPrice !== undefined) {
+        priceFilter.$lte = maxPrice;
+      }
+
+      pipeline.push({ $match: { currentPrice: priceFilter } });
+    }
+
+    // Add pagination, sorting, and populate
+    pipeline.push({ $skip: skip }, { $limit: limit }, { $sort: sort });
+
+    // If no price filtering, use the regular find method
+    let items;
+    if (minPrice === undefined && maxPrice === undefined) {
+      items = await this.productModel
         .find(query)
         .skip(skip)
         .limit(limit)
@@ -91,7 +114,198 @@ export class ProductClientService {
         .populate('categories', 'name slug')
         .populate('primaryCategoryId', 'name slug')
         .populate('brandId', 'name slug')
-        .select('name slug images variants originalPrice'),
+        .select('name slug images variants originalPrice');
+    } else {
+      // Use aggregation pipeline with price filtering
+      items = await this.productModel.aggregate(pipeline).exec();
+
+      // Manually populate references after aggregation
+      await this.productModel.populate(items, [
+        { path: 'categories', select: 'name slug' },
+        { path: 'primaryCategoryId', select: 'name slug' },
+        { path: 'brandId', select: 'name slug' },
+      ]);
+    }
+
+    // Get total count (needs to account for price filtering)
+    let total;
+    if (minPrice === undefined && maxPrice === undefined) {
+      total = await this.productModel.countDocuments(query);
+    } else {
+      // Count with price filtering
+      const countPipeline = pipeline.slice(
+        0,
+        pipeline.findIndex((stage) => '$skip' in stage),
+      );
+      const countResult = await this.productModel.aggregate([...countPipeline, { $count: 'total' }]).exec();
+      total = countResult.length > 0 ? countResult[0].total : 0;
+    }
+
+    // Check favorite status if userId is provided
+    let favorites = new Set<string>();
+    if (userId) {
+      const userFavorites = await this.favoriteModel.find({
+        userId: new Types.ObjectId(userId),
+        productId: { $in: items.map((item) => item._id) },
+      });
+      favorites = new Set(userFavorites.map((fav) => fav.productId.toString()));
+    }
+
+    const products = items.map((item) => {
+      const product = item.toObject ? item.toObject() : item;
+      if (userId) {
+        product.isFavorite = favorites.has(item._id.toString());
+      }
+
+      const { primaryCategoryId, brandId, variants, ...rest } = product;
+
+      return {
+        ...rest,
+        primaryCategory: primaryCategoryId,
+        brand: brandId,
+        currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        variants: variants.map((variant) => ({
+          sku: variant.sku,
+          price: variant.price,
+          quantity: variant.quantity,
+          attributes: variant.attributes,
+          _id: variant._id,
+        })),
+      };
+    });
+
+    return {
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+      items: products,
+    };
+  }
+
+  async findOne(idOrSlug: string, userId: string | null = null) {
+    const query: any = { isActive: true };
+
+    // Check if the provided string is a valid MongoDB ObjectId
+    if (isValidObjectId(idOrSlug)) {
+      query._id = idOrSlug;
+    } else {
+      query.slug = idOrSlug;
+    }
+
+    const product = await this.productModel
+      .findOne(query)
+      .populate('categories', 'name slug')
+      .populate('primaryCategoryId', 'name slug')
+      .populate('brandId', 'name slug');
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    // Increment view count
+    await this.productModel.findByIdAndUpdate(product._id, { $inc: { viewCount: 1 } });
+
+    // Check if product is favorited by user
+    const result = product.toObject ? product.toObject() : product;
+    if (userId) {
+      const isFavorite = await this.favoriteModel.exists({
+        userId: new Types.ObjectId(userId),
+        productId: product._id,
+      });
+      result.isFavorite = !!isFavorite;
+    }
+
+    const currentPrice = Math.min(...result.variants.map((variant) => variant.price));
+
+    const productResult = {
+      ...result,
+      totalQuantity: result.variants.reduce((acc, variant) => acc + variant.quantity, 0),
+      currentPrice,
+    };
+    return productResult;
+  }
+
+  async getFeaturedProducts(limit: number = 10, userId: string | null = null) {
+    const now = new Date();
+
+    const query = {
+      isActive: true,
+      isFeatured: true,
+    };
+
+    const [items, total] = await Promise.all([
+      this.productModel
+        .find(query)
+        .limit(limit)
+        .sort({ createdAt: -1 })
+        .populate('primaryCategoryId', 'name slug')
+        .populate('brandId', 'name slug'),
+      this.productModel.countDocuments(query),
+    ]);
+
+    // Check favorite status if userId is provided
+    let favorites = new Set<string>();
+    if (userId) {
+      const userFavorites = await this.favoriteModel.find({
+        userId: new Types.ObjectId(userId),
+        productId: { $in: items.map((item) => item._id) },
+      });
+      favorites = new Set(userFavorites.map((fav) => fav.productId.toString()));
+    }
+
+    const products = items.map((item) => {
+      const product = item.toObject ? item.toObject() : item;
+      if (userId) {
+        product.isFavorite = favorites.has(item._id.toString());
+      }
+
+      const { primaryCategoryId, brandId, variants, ...rest } = product;
+
+      return {
+        ...rest,
+        primaryCategory: primaryCategoryId,
+        brand: brandId,
+        currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        variants: variants.map((variant) => ({
+          sku: variant.sku,
+          price: variant.price,
+          quantity: variant.quantity,
+          attributes: variant.attributes,
+          _id: variant._id,
+        })),
+      };
+    });
+
+    return {
+      meta: {
+        total,
+        page: 1,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+      items: products,
+    };
+  }
+
+  async getBestSellerProducts(limit: number = 10, page: number = 1, userId: string | null = null) {
+    const skip = (page - 1) * limit;
+    const now = new Date();
+    const query = {
+      isActive: true,
+      $or: [{ isBestSeller: true }, { totalSoldCount: { $gt: 0 } }],
+    };
+
+    const [items, total] = await Promise.all([
+      this.productModel
+        .find(query)
+        .skip(skip)
+        .limit(limit)
+        .sort({ totalSoldCount: -1, viewCount: -1 })
+        .populate('primaryCategoryId', 'name slug')
+        .populate('brandId', 'name slug'),
       this.productModel.countDocuments(query),
     ]);
 
@@ -139,141 +353,6 @@ export class ProductClientService {
     };
   }
 
-  async findOne(idOrSlug: string, userId: string | null = null) {
-    const query: any = { isActive: true };
-
-    // Check if the provided string is a valid MongoDB ObjectId
-    if (isValidObjectId(idOrSlug)) {
-      query._id = idOrSlug;
-    } else {
-      query.slug = idOrSlug;
-    }
-
-    // Apply date-based availability filters
-    const now = new Date();
-    query.$or = [{ availableFrom: { $exists: false } }, { availableFrom: null }, { availableFrom: { $lte: now } }];
-
-    query.$and = [
-      {
-        $or: [{ availableTo: { $exists: false } }, { availableTo: null }, { availableTo: { $gte: now } }],
-      },
-    ];
-
-    const product = await this.productModel
-      .findOne(query)
-      .populate('categories', 'name slug')
-      .populate('primaryCategoryId', 'name slug')
-      .populate('brandId', 'name slug');
-
-    if (!product) {
-      throw new NotFoundException('Product not found');
-    }
-
-    // Increment view count
-    await this.productModel.findByIdAndUpdate(product._id, { $inc: { viewCount: 1 } });
-
-    // Check if product is favorited by user
-    const result = product.toObject ? product.toObject() : product;
-    if (userId) {
-      const isFavorite = await this.favoriteModel.exists({
-        userId: new Types.ObjectId(userId),
-        productId: product._id,
-      });
-      result.isFavorite = !!isFavorite;
-    }
-
-    const currentPrice = Math.min(...result.variants.map((variant) => variant.price));
-
-    const productResult = {
-      ...result,
-      totalQuantity: result.variants.reduce((acc, variant) => acc + variant.quantity, 0),
-      currentPrice,
-    };
-    return productResult;
-  }
-
-  async getFeaturedProducts(limit: number = 10, userId: string | null = null) {
-    const now = new Date();
-
-    const query = {
-      isActive: true,
-      isFeatured: true,
-    };
-
-    const products = await this.productModel
-      .find(query)
-      .limit(limit)
-      .sort({ createdAt: -1 })
-      .populate('primaryCategoryId', 'name slug')
-      .populate('brandId', 'name slug');
-
-    // Check favorite status if userId is provided
-    if (userId) {
-      const productIds = products.map((p) => p._id);
-      const favorites = await this.favoriteModel.find({
-        userId: new Types.ObjectId(userId),
-        productId: { $in: productIds },
-      });
-
-      const favoriteSet = new Set(favorites.map((f) => f.productId.toString()));
-
-      return products.map((product) => {
-        const result = product.toObject ? product.toObject() : product;
-        result.isFavorite = favoriteSet.has(product._id.toString());
-        return result;
-      });
-    }
-
-    return products;
-  }
-
-  async getBestSellerProducts(limit: number = 10, page: number = 1, userId: string | null = null) {
-    const skip = (page - 1) * limit;
-    const now = new Date();
-    const query = {
-      isActive: true,
-      $or: [{ isBestSeller: true }, { totalSoldCount: { $gt: 0 } }],
-    };
-
-    const [products, total] = await Promise.all([
-      this.productModel
-        .find(query)
-        .skip(skip)
-        .limit(limit)
-        .sort({ totalSoldCount: -1, viewCount: -1 })
-        .populate('primaryCategoryId', 'name slug')
-        .populate('brandId', 'name slug'),
-      this.productModel.countDocuments(query),
-    ]);
-
-    // Check favorite status if userId is provided
-    if (userId) {
-      const productIds = products.map((p) => p._id);
-      const favorites = await this.favoriteModel.find({
-        userId: new Types.ObjectId(userId),
-        productId: { $in: productIds },
-      });
-
-      const favoriteSet = new Set(favorites.map((f) => f.productId.toString()));
-
-      return products.map((product) => {
-        const result = product.toObject ? product.toObject() : product;
-        result.isFavorite = favoriteSet.has(product._id.toString());
-        return result;
-      });
-    }
-
-    return {
-      items: products,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
-
   async getNewArrivalProducts(limit: number = 10, page: number = 1, userId: string | null = null) {
     const skip = (page - 1) * limit;
     const now = new Date();
@@ -288,7 +367,7 @@ export class ProductClientService {
       },
     };
 
-    const [products, total] = await Promise.all([
+    const [items, total] = await Promise.all([
       this.productModel
         .find(query)
         .limit(limit)
@@ -303,25 +382,42 @@ export class ProductClientService {
     if (userId) {
       const userFavorites = await this.favoriteModel.find({
         userId: new Types.ObjectId(userId),
-        productId: { $in: products.map((product) => product._id) },
+        productId: { $in: items.map((item) => item._id) },
       });
       favorites = new Set(userFavorites.map((fav) => fav.productId.toString()));
     }
 
-    const productsWithFavoriteStatus = products.map((product) => {
-      const result = product.toObject ? product.toObject() : product;
-      result.isFavorite = favorites.has(product._id.toString());
-      return result;
+    const products = items.map((item) => {
+      const product = item.toObject ? item.toObject() : item;
+      if (userId) {
+        product.isFavorite = favorites.has(item._id.toString());
+      }
+
+      const { primaryCategoryId, brandId, variants, ...rest } = product;
+
+      return {
+        ...rest,
+        primaryCategory: primaryCategoryId,
+        brand: brandId,
+        currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        variants: variants.map((variant) => ({
+          sku: variant.sku,
+          price: variant.price,
+          quantity: variant.quantity,
+          attributes: variant.attributes,
+          _id: variant._id,
+        })),
+      };
     });
 
     return {
-      items: productsWithFavoriteStatus,
       meta: {
         total,
         page,
         limit,
         totalPages: Math.ceil(total / limit),
       },
+      items: products,
     };
   }
 
@@ -333,7 +429,7 @@ export class ProductClientService {
       isOnSale: true,
     };
 
-    const [products, total] = await Promise.all([
+    const [items, total] = await Promise.all([
       this.productModel
         .find(query)
         .skip(skip)
@@ -349,25 +445,42 @@ export class ProductClientService {
     if (userId) {
       const userFavorites = await this.favoriteModel.find({
         userId: new Types.ObjectId(userId),
-        productId: { $in: products.map((product) => product._id) },
+        productId: { $in: items.map((item) => item._id) },
       });
       favorites = new Set(userFavorites.map((fav) => fav.productId.toString()));
     }
 
-    const productsWithFavoriteStatus = products.map((product) => {
-      const result = product.toObject ? product.toObject() : product;
-      result.isFavorite = favorites.has(product._id.toString());
-      return result;
+    const products = items.map((item) => {
+      const product = item.toObject ? item.toObject() : item;
+      if (userId) {
+        product.isFavorite = favorites.has(item._id.toString());
+      }
+
+      const { primaryCategoryId, brandId, variants, ...rest } = product;
+
+      return {
+        ...rest,
+        primaryCategory: primaryCategoryId,
+        brand: brandId,
+        currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        variants: variants.map((variant) => ({
+          sku: variant.sku,
+          price: variant.price,
+          quantity: variant.quantity,
+          attributes: variant.attributes,
+          _id: variant._id,
+        })),
+      };
     });
 
     return {
-      items: productsWithFavoriteStatus,
       meta: {
         total,
         page,
         limit,
         totalPages: Math.ceil(total / limit),
       },
+      items: products,
     };
   }
 
@@ -390,7 +503,7 @@ export class ProductClientService {
       ],
     };
 
-    const [products, total] = await Promise.all([
+    const [items, total] = await Promise.all([
       this.productModel
         .find(query)
         .skip(skip)
@@ -402,21 +515,37 @@ export class ProductClientService {
     ]);
 
     // Check favorite status if userId is provided
+    let favorites = new Set<string>();
     if (userId) {
-      const productIds = products.map((p) => p._id);
-      const favorites = await this.favoriteModel.find({
+      const userFavorites = await this.favoriteModel.find({
         userId: new Types.ObjectId(userId),
-        productId: { $in: productIds },
+        productId: { $in: items.map((item) => item._id) },
       });
-
-      const favoriteSet = new Set(favorites.map((f) => f.productId.toString()));
-
-      return products.map((product) => {
-        const result = product.toObject ? product.toObject() : product;
-        result.isFavorite = favoriteSet.has(product._id.toString());
-        return result;
-      });
+      favorites = new Set(userFavorites.map((fav) => fav.productId.toString()));
     }
+
+    const products = items.map((item) => {
+      const product = item.toObject ? item.toObject() : item;
+      if (userId) {
+        product.isFavorite = favorites.has(item._id.toString());
+      }
+
+      const { primaryCategoryId, brandId, variants, ...rest } = product;
+
+      return {
+        ...rest,
+        primaryCategory: primaryCategoryId,
+        brand: brandId,
+        currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        variants: variants.map((variant) => ({
+          sku: variant.sku,
+          price: variant.price,
+          quantity: variant.quantity,
+          attributes: variant.attributes,
+          _id: variant._id,
+        })),
+      };
+    });
 
     return {
       meta: {

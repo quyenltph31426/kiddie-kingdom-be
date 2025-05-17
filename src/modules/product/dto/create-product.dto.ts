@@ -108,18 +108,6 @@ export class CreateProductDto {
   @IsOptional()
   specifications?: Record<string, string>;
 
-  // @ApiPropertyOptional({ example: '2023-01-01T00:00:00.000Z' })
-  // @IsDate()
-  // @Type(() => Date)
-  // @IsOptional()
-  // availableFrom?: Date;
-
-  // @ApiPropertyOptional({ example: '2023-12-31T23:59:59.999Z' })
-  // @IsDate()
-  // @Type(() => Date)
-  // @IsOptional()
-  // availableTo?: Date;
-
   @ApiPropertyOptional({ example: true })
   @IsBoolean()
   @IsOptional()
