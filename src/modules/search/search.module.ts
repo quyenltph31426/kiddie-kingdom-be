@@ -21,4 +21,3 @@ import { SearchController } from './controllers/search.controller';
   exports: [SearchService],
 })
 export class SearchModule {}
-

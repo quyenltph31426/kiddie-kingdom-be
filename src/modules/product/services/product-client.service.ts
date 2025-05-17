@@ -198,12 +198,6 @@ export class ProductClientService {
     const query = {
       isActive: true,
       isFeatured: true,
-      $or: [{ availableFrom: { $exists: false } }, { availableFrom: null }, { availableFrom: { $lte: now } }],
-      $and: [
-        {
-          $or: [{ availableTo: { $exists: false } }, { availableTo: null }, { availableTo: { $gte: now } }],
-        },
-      ],
     };
 
     const products = await this.productModel
@@ -239,14 +233,6 @@ export class ProductClientService {
     const query = {
       isActive: true,
       $or: [{ isBestSeller: true }, { totalSoldCount: { $gt: 0 } }],
-      $and: [
-        {
-          $or: [{ availableFrom: { $exists: false } }, { availableFrom: null }, { availableFrom: { $lte: now } }],
-        },
-        {
-          $or: [{ availableTo: { $exists: false } }, { availableTo: null }, { availableTo: { $gte: now } }],
-        },
-      ],
     };
 
     const [products, total] = await Promise.all([
@@ -290,15 +276,15 @@ export class ProductClientService {
 
   async getNewArrivalProducts(limit: number = 10, userId: string | null = null) {
     const now = new Date();
+    const tenDaysAgo = new Date(new Date().setDate(now.getDate() - 10));
+
     const query = {
       isActive: true,
       isNewArrival: true,
-      $or: [{ availableFrom: { $exists: false } }, { availableFrom: null }, { availableFrom: { $lte: now } }],
-      $and: [
-        {
-          $or: [{ availableTo: { $exists: false } }, { availableTo: null }, { availableTo: { $gte: now } }],
-        },
-      ],
+      createdAt: {
+        $gte: tenDaysAgo,
+        $lte: now,
+      },
     };
 
     const products = await this.productModel
@@ -334,12 +320,6 @@ export class ProductClientService {
     const query = {
       isActive: true,
       isOnSale: true,
-      $or: [{ availableFrom: { $exists: false } }, { availableFrom: null }, { availableFrom: { $lte: now } }],
-      $and: [
-        {
-          $or: [{ availableTo: { $exists: false } }, { availableTo: null }, { availableTo: { $gte: now } }],
-        },
-      ],
     };
 
     const [products, total] = await Promise.all([

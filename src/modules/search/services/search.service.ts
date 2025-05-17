@@ -108,10 +108,7 @@ export class SearchService {
   private async searchCategories(query: string, skip: number, limit: number) {
     const searchQuery = {
       isActive: true,
-      $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-      ],
+      $or: [{ name: { $regex: query, $options: 'i' } }, { description: { $regex: query, $options: 'i' } }],
     };
 
     const [items, total] = await Promise.all([
@@ -166,4 +163,3 @@ export class SearchService {
     };
   }
 }
-

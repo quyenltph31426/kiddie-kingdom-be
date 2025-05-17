@@ -58,10 +58,6 @@ export class CreateProductDto {
   @IsOptional()
   description?: string;
 
-  @ApiProperty({ example: 'simple', enum: ['simple', 'variable'] })
-  @IsString()
-  type: 'simple' | 'variable';
-
   @ApiPropertyOptional({ example: ['https://example.com/product1.jpg'] })
   @IsArray()
   @IsString({ each: true })
