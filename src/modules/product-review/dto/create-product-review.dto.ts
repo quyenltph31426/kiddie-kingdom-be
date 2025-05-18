@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsNumber, IsArray, IsOptional, Min, Max, IsMongoId } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, IsArray, IsOptional, Min, Max, IsMongoId } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateProductReviewDto {
@@ -10,6 +10,14 @@ export class CreateProductReviewDto {
   @IsNotEmpty()
   @IsMongoId()
   productId: string;
+
+  @ApiProperty({
+    description: 'Order ID',
+    example: '60d21b4667d0d8992e610c86',
+  })
+  @IsNotEmpty()
+  @IsMongoId()
+  orderId: string;
 
   @ApiProperty({
     description: 'Rating (1-5)',

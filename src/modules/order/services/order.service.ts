@@ -9,6 +9,7 @@ import { Product, ProductDocument } from '@/database/schemas/product.schema';
 import { VoucherService } from '@/modules/voucher/services/voucher.service';
 import { Voucher, VoucherDocument } from '@/database/schemas/voucher.schema';
 import { ProductService } from '@/modules/product/services/product.service';
+import { ProductReview, ProductReviewDocument } from '@/database/schemas/product-review.schema';
 
 interface OrderWithPayment extends Order {
   paymentSession?: any;
@@ -27,6 +28,7 @@ export class OrderService {
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(Voucher.name) private voucherModel: Model<VoucherDocument>,
+    @InjectModel(ProductReview.name) private reviewModel: Model<ProductReviewDocument>,
     private paymentService: PaymentService,
     private voucherService: VoucherService,
     private productService: ProductService,
@@ -293,14 +295,35 @@ export class OrderService {
       });
     });
 
+    // Lấy danh sách các đánh giá của user
+    const userReviews = await this.reviewModel.find({
+      userId: new Types.ObjectId(userId),
+      productId: { $in: productIds },
+    });
+
+    // Tạo map để kiểm tra nhanh sản phẩm nào đã được đánh giá
+    const reviewedProductMap = new Map();
+    userReviews.forEach((review) => {
+      reviewedProductMap.set(review.productId.toString(), {
+        reviewId: review._id,
+        rating: review.rating,
+        comment: review.comment,
+      });
+    });
+
     const enrichedOrders = orders.map((order) => {
       const orderObj = order.toObject ? order.toObject() : order;
 
       const enrichedItems = orderObj.items.map((item) => {
         const productInfo = productMap.get(item.productId.toString());
+        const reviewInfo = reviewedProductMap.get(item.productId.toString());
 
         if (!productInfo) {
-          return item;
+          return {
+            ...item,
+            isReviewed: !!reviewInfo,
+            reviewInfo: reviewInfo || null,
+          };
         }
 
         let variantInfo = null;
@@ -313,12 +336,22 @@ export class OrderService {
           productName: productInfo.name,
           productImage: productInfo.image,
           attributes: variantInfo ? variantInfo.attributes : {},
+          isReviewed: !!reviewInfo,
+          reviewInfo: reviewInfo || null,
         };
       });
+
+      // Kiểm tra xem tất cả các sản phẩm trong đơn hàng đã được đánh giá chưa
+      const allItemsReviewed = enrichedItems.every((item) => item.isReviewed);
+      const someItemsReviewed = enrichedItems.some((item) => item.isReviewed);
 
       return {
         ...orderObj,
         items: enrichedItems,
+        reviewStatus: {
+          allItemsReviewed,
+          someItemsReviewed,
+        },
       };
     });
 

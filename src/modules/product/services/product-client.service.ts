@@ -296,21 +296,41 @@ export class ProductClientService {
 
   async getBestSellerProducts(limit: number = 10, page: number = 1, userId: string | null = null) {
     const skip = (page - 1) * limit;
-    const now = new Date();
     const query = {
       isActive: true,
-      $or: [{ isBestSeller: true }, { totalSoldCount: { $gt: 0 } }],
+      $or: [{ isBestSeller: true }, { 'variants.soldCount': { $gt: 0 } }],
     };
 
-    const [items, total] = await Promise.all([
-      this.productModel
-        .find(query)
-        .skip(skip)
-        .limit(limit)
-        .sort({ totalSoldCount: -1, viewCount: -1 })
-        .populate('primaryCategoryId', 'name slug')
-        .populate('brandId', 'name slug'),
+    // Sử dụng aggregation để tính tổng soldCount từ variants
+    const aggregationPipeline = [
+      { $match: query },
+      {
+        $addFields: {
+          calculatedTotalSoldCount: {
+            $sum: {
+              $map: {
+                input: '$variants',
+                as: 'variant',
+                in: { $ifNull: ['$$variant.soldCount', 0] },
+              },
+            },
+          },
+        },
+      },
+      { $sort: { calculatedTotalSoldCount: -1, viewCount: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+    ];
+
+    const [items, totalCount] = await Promise.all([
+      this.productModel.aggregate(aggregationPipeline as any),
       this.productModel.countDocuments(query),
+    ]);
+
+    // Populate references manually after aggregation
+    await this.productModel.populate(items, [
+      { path: 'primaryCategoryId', select: 'name slug' },
+      { path: 'brandId', select: 'name slug' },
     ]);
 
     // Check favorite status if userId is provided
@@ -323,13 +343,12 @@ export class ProductClientService {
       favorites = new Set(userFavorites.map((fav) => fav.productId.toString()));
     }
 
-    const products = items.map((item) => {
-      const product = item.toObject ? item.toObject() : item;
+    const products = items.map((product) => {
       if (userId) {
-        product.isFavorite = favorites.has(item._id.toString());
+        product.isFavorite = favorites.has(product._id.toString());
       }
 
-      const { primaryCategoryId, brandId, variants, ...rest } = product;
+      const { primaryCategoryId, brandId, variants, calculatedTotalSoldCount, ...rest } = product;
 
       return {
         ...rest,
@@ -337,7 +356,7 @@ export class ProductClientService {
         brand: brandId,
         currentPrice: Math.min(...variants.map((variant) => variant.price)),
         totalQuantity: variants.reduce((acc, variant) => acc + variant.quantity, 0),
-        totalSoldCount: variants.reduce((acc, variant) => acc + (variant.soldCount || 0), 0),
+        totalSoldCount: calculatedTotalSoldCount,
         variants: variants.map((variant) => ({
           sku: variant.sku,
           price: variant.price,
@@ -351,10 +370,10 @@ export class ProductClientService {
     return {
       items: products,
       meta: {
-        total,
+        total: totalCount,
         page,
         limit,
-        totalPages: Math.ceil(total / limit),
+        totalPages: Math.ceil(totalCount / limit),
       },
     };
   }
