@@ -67,6 +67,6 @@ export class OrderClientController {
   @Get(':id')
   @ApiOperation({ summary: 'Get order details' })
   findOne(@Param('id') id: string, @Request() req) {
-    return this.orderService.findUserOrders(id, req.user.sub);
+    return this.orderService.getOrderDetails(id, req.user.sub);
   }
 }

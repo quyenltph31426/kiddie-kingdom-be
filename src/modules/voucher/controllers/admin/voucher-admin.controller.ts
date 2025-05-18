@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { VoucherService } from '../../services/voucher.service';
 import { CreateVoucherDto } from '../../dto/create-voucher.dto';
 import { UpdateVoucherDto } from '../../dto/update-voucher.dto';
@@ -63,5 +63,12 @@ export class VoucherAdminController {
   @AdminRolesAllowed(AdminRoles.ADMIN)
   remove(@Param('id') id: string) {
     return this.voucherService.remove(id);
+  }
+
+  @Get('code/:code')
+  @ApiOperation({ summary: 'Get voucher by code (admin)' })
+  @ApiParam({ name: 'code', description: 'Voucher code' })
+  findByCode(@Param('code') code: string) {
+    return this.voucherService.findByCode(code);
   }
 }

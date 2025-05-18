@@ -5,12 +5,16 @@ import { Order, OrderDocument } from '@/database/schemas/order.schema';
 import { PaymentHistory, PaymentHistoryDocument } from '@/database/schemas/payment-history.schema';
 import { UpdateOrderDto } from '../dto/update-order.dto';
 import { PaymentStatus, ShippingStatus } from '@/shared/enums';
+import { Product, ProductDocument } from '@/database/schemas/product.schema';
+import { ProductService } from '@/modules/product/services/product.service';
 
 @Injectable()
 export class OrderAdminService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(PaymentHistory.name) private paymentHistoryModel: Model<PaymentHistoryDocument>,
+    private productService: ProductService,
   ) {}
 
   async findAll(options: {
@@ -65,8 +69,60 @@ export class OrderAdminService {
       this.orderModel.countDocuments(query),
     ]);
 
+    // Lấy danh sách tất cả productIds từ các đơn hàng
+    const productIds = orders.flatMap((order) => order.items.map((item) => item.productId));
+
+    // Truy vấn bảng product để lấy thông tin name, images và variants
+    const products = await this.productModel
+      .find({
+        _id: { $in: productIds },
+      })
+      .select('name images variants');
+
+    // Tạo map để tra cứu nhanh thông tin sản phẩm
+    const productMap = new Map();
+    products.forEach((product) => {
+      productMap.set(product._id.toString(), {
+        name: product.name,
+        image: product.images && product.images.length > 0 ? product.images[0] : null,
+        variants: product.variants || [],
+      });
+    });
+
+    // Bổ sung thông tin sản phẩm vào các đơn hàng
+    const enrichedOrders = orders.map((order) => {
+      const orderObj = order.toObject ? order.toObject() : order;
+
+      // Bổ sung thông tin sản phẩm cho mỗi item trong đơn hàng
+      const enrichedItems = orderObj.items.map((item) => {
+        const productInfo = productMap.get(item.productId.toString());
+
+        if (!productInfo) {
+          return item;
+        }
+
+        // Tìm thông tin variant nếu có
+        let variantInfo = null;
+        if (item.variantId && productInfo.variants) {
+          variantInfo = productInfo.variants.find((variant) => variant._id.toString() === item.variantId.toString());
+        }
+
+        return {
+          ...item,
+          productName: productInfo.name,
+          productImage: productInfo.image,
+          attributes: variantInfo ? variantInfo.attributes : {},
+        };
+      });
+
+      return {
+        ...orderObj,
+        items: enrichedItems,
+      };
+    });
+
     return {
-      items: orders,
+      items: enrichedOrders,
       meta: {
         total,
         page,
@@ -93,6 +149,8 @@ export class OrderAdminService {
       throw new NotFoundException('Order not found');
     }
 
+    const previousShippingStatus = order.shippingStatus;
+
     // Update order fields
     if (updateOrderDto.paymentStatus) {
       order.paymentStatus = updateOrderDto.paymentStatus;
@@ -114,6 +172,28 @@ export class OrderAdminService {
       // If order is delivered, set deliveredAt
       if (updateOrderDto.shippingStatus === ShippingStatus.DELIVERED && !order.deliveredAt) {
         order.deliveredAt = updateOrderDto.deliveredAt || new Date();
+      }
+
+      // If order is canceled or rejected, restore product quantities
+      if (
+        updateOrderDto.shippingStatus === ShippingStatus.CANCELED &&
+        previousShippingStatus !== ShippingStatus.CANCELED
+      ) {
+        try {
+          for (const item of order.items) {
+            if (item.productId && item.variantId) {
+              await this.productService.updateVariantStockOnOrder(
+                item.productId.toString(),
+                item.variantId.toString(),
+                item.quantity,
+                false, // isOrderCreation = false (restoring stock)
+              );
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to restore product quantities: ${error.message}`);
+          // Continue with order update even if stock restoration fails
+        }
       }
     }
 

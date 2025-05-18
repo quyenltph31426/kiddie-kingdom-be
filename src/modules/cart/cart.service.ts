@@ -6,7 +6,7 @@ import { Product, ProductDocument } from '@/database/schemas/product.schema';
 
 // Constants for cart limits
 const MAX_CART_ITEMS = 50; // Maximum number of unique products in cart
-const MAX_QUANTITY_PER_ITEM = 10; // Maximum quantity of a single product
+const MAX_QUANTITY_PER_ITEM = 1000; // Maximum quantity of a single product
 const MIN_QUANTITY_PER_ITEM = 1; // Minimum quantity of a single product
 
 @Injectable()
@@ -44,7 +44,8 @@ export class CartService {
 
         if (product.variants && product.variants.length > 0) {
           // Get total quantity across all variants
-          totalQuantity = product.variants.reduce((sum, v) => sum + (v.quantity || 0), 0);
+          totalQuantity =
+            product.variants.find((v) => v._id && v._id.toString() === item.variantId.toString())?.quantity || 0;
 
           // If there's a variantId, find the specific variant
           if (item.variantId) {
@@ -153,7 +154,7 @@ export class CartService {
     return this.getCart(userId);
   }
 
-  async updateCartItemQuantity(userId: string, productId: string, quantity: number, variantId?: string) {
+  async updateCartItemById(userId: string, cartItemId: string, quantity: number) {
     // Validate quantity
     if (quantity < MIN_QUANTITY_PER_ITEM) {
       throw new BadRequestException(`Quantity must be at least ${MIN_QUANTITY_PER_ITEM}`);
@@ -169,10 +170,8 @@ export class CartService {
       throw new NotFoundException('Cart not found');
     }
 
-    // Find the item in the cart
-    const itemIndex = cart.items.findIndex(
-      (item) => item.productId.toString() === productId && (!variantId || item.variantId?.toString() === variantId),
-    );
+    // Find the item in the cart by its ID
+    const itemIndex = cart.items.findIndex((item) => item._id.toString() === cartItemId);
 
     if (itemIndex === -1) {
       throw new NotFoundException('Item not found in cart');
@@ -225,6 +224,25 @@ export class CartService {
     await cart.save();
 
     return { success: true };
+  }
+
+  async removeCartItems(userId: string, itemIds: string[]) {
+    const cart = await this.cartModel.findOne({ userId: new Types.ObjectId(userId) });
+
+    if (!cart) {
+      return { success: true };
+    }
+
+    // Convert string IDs to ObjectId for comparison
+    const objectIdSet = new Set(itemIds.map((id) => id.toString()));
+
+    // Filter out items that should be removed
+    cart.items = cart.items.filter((item) => !objectIdSet.has(item._id.toString()));
+
+    // Save cart
+    await cart.save();
+
+    return this.getCart(userId);
   }
 
   // Method to merge guest cart with user cart after login

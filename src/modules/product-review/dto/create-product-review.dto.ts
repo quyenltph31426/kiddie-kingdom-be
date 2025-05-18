@@ -12,22 +12,6 @@ export class CreateProductReviewDto {
   productId: string;
 
   @ApiProperty({
-    description: 'Order ID',
-    example: '60d21b4667d0d8992e610c86',
-  })
-  @IsNotEmpty()
-  @IsMongoId()
-  orderId: string;
-
-  @ApiPropertyOptional({
-    description: 'Order item ID',
-    example: '60d21b4667d0d8992e610c87',
-  })
-  @IsOptional()
-  @IsMongoId()
-  orderItemId?: string;
-
-  @ApiProperty({
     description: 'Rating (1-5)',
     example: 5,
     minimum: 1,

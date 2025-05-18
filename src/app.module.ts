@@ -24,6 +24,8 @@ import emailConfig from './config/email.config';
 import { OrderModule } from './modules/order/order.module';
 import { VoucherModule } from './modules/voucher/voucher.module';
 import { ProductReviewModule } from './modules/product-review/product-review.module';
+import { SearchModule } from './modules/search/search.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -49,6 +51,8 @@ import { ProductReviewModule } from './modules/product-review/product-review.mod
     OrderModule,
     VoucherModule,
     ProductReviewModule,
+    SearchModule,
+    DashboardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,11 +1,12 @@
-import { Controller, Get, Post, Body, Delete, Put, UseGuards, Request } from '@nestjs/common';
-import { CartService } from './cart.service';
 import { AuthGuard } from '@/modules/auth/guards/auth.guard';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Param, Post, Put, Request, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { CartService } from './cart.service';
 import { AddToCartDto } from './dto/add-to-cart.dto';
-import { UpdateCartItemDto } from './dto/update-cart-item.dto';
-import { RemoveFromCartDto } from './dto/remove-from-cart.dto';
 import { MergeCartDto } from './dto/merge-cart.dto';
+import { RemoveCartItemsDto } from './dto/remove-cart-items.dto';
+import { RemoveFromCartDto } from './dto/remove-from-cart.dto';
+import { UpdateCartItemQuantityDto } from './dto/update-cart-item-quantity.dto';
 
 @ApiTags('Cart')
 @Controller('cart')
@@ -31,15 +32,15 @@ export class CartController {
     );
   }
 
-  @Put()
-  @ApiOperation({ summary: 'Update cart item quantity' })
-  async updateCartItem(@Request() req, @Body() updateCartItemDto: UpdateCartItemDto) {
-    return this.cartService.updateCartItemQuantity(
-      req.user.sub,
-      updateCartItemDto.productId,
-      updateCartItemDto.quantity,
-      updateCartItemDto.variantId,
-    );
+  @Put(':cartItemId')
+  @ApiOperation({ summary: 'Update cart item quantity by ID' })
+  @ApiParam({ name: 'cartItemId', description: 'Cart item ID' })
+  async updateCartItemById(
+    @Request() req,
+    @Param('cartItemId') cartItemId: string,
+    @Body() updateCartItemQuantityDto: UpdateCartItemQuantityDto,
+  ) {
+    return this.cartService.updateCartItemById(req.user.sub, cartItemId, updateCartItemQuantityDto.quantity);
   }
 
   @Delete('item')
@@ -58,5 +59,11 @@ export class CartController {
   @ApiOperation({ summary: 'Merge guest cart with user cart after login' })
   async mergeCart(@Request() req, @Body() mergeCartDto: MergeCartDto) {
     return this.cartService.mergeGuestCart(req.user.sub, mergeCartDto.items);
+  }
+
+  @Delete('items')
+  @ApiOperation({ summary: 'Remove multiple items from cart' })
+  async removeCartItems(@Request() req, @Body() removeCartItemsDto: RemoveCartItemsDto) {
+    return this.cartService.removeCartItems(req.user.sub, removeCartItemsDto.itemIds);
   }
 }

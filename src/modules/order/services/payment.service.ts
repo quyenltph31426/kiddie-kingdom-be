@@ -100,7 +100,6 @@ export class PaymentService {
   }
 
   private async createVnpayPaymentUrl(order: OrderDocument): Promise<string> {
-    console.log(this.vnpayConfig);
     const tmnCode = this.vnpayConfig.tmnCode;
     const secretKey = this.vnpayConfig.hashSecret;
     const returnUrl = this.vnpayConfig.returnUrl;
