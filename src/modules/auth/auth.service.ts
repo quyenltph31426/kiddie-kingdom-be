@@ -76,6 +76,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is not active');
+    }
+
     // Verify password
     const isPasswordValid = Hash.compare(password, user.password);
     if (!isPasswordValid) {
@@ -88,6 +92,10 @@ export class AuthService {
 
     // Generate tokens
     const tokens = await this.tokenService.generateAuthTokens(user._id.toString(), user.email);
+
+    await this.userModel.findByIdAndUpdate(user._id, {
+      lastLogin: new Date(),
+    });
 
     return {
       user: {
@@ -145,8 +153,16 @@ export class AuthService {
       });
     }
 
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is not active');
+    }
+
     // Generate tokens
     const tokens = await this.tokenService.generateAuthTokens(user._id.toString(), user.email);
+
+    await this.userModel.findByIdAndUpdate(user._id, {
+      lastLogin: new Date(),
+    });
 
     return {
       user: {

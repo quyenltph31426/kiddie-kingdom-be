@@ -3,13 +3,16 @@ import { Document, Types } from 'mongoose';
 
 export type ProductReviewDocument = ProductReview & Document;
 
-@Schema({ timestamps: true, collection: 'product_review' })
+@Schema({ timestamps: true, collection: 'product_reviews' })
 export class ProductReview {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
   productId: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'Order', required: true })
+  orderId: Types.ObjectId;
 
   @Prop({ required: true, min: 1, max: 5 })
   rating: number;
@@ -39,10 +42,11 @@ export class ProductReview {
 export const ProductReviewSchema = SchemaFactory.createForClass(ProductReview);
 
 // Add compound index to ensure a user can only review a product once
-ProductReviewSchema.index({ userId: 1, productId: 1 }, { unique: true });
+ProductReviewSchema.index({ userId: 1, productId: 1, orderId: 1 }, { unique: true });
 
 // Add indexes for better query performance
 ProductReviewSchema.index({ productId: 1, isActive: 1 });
 ProductReviewSchema.index({ userId: 1 });
+ProductReviewSchema.index({ orderId: 1 });
 ProductReviewSchema.index({ createdAt: -1 });
 ProductReviewSchema.index({ rating: -1 });

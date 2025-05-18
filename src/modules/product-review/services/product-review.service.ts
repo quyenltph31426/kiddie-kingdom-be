@@ -18,7 +18,7 @@ export class ProductReviewService {
   ) {}
 
   async create(userId: string, createReviewDto: CreateProductReviewDto): Promise<ProductReview> {
-    const { productId, rating, comment, images } = createReviewDto;
+    const { productId, rating, comment, images, orderId } = createReviewDto;
 
     // Check if product exists
     const product = await this.productModel.findById(productId);
@@ -30,28 +30,31 @@ export class ProductReviewService {
     const existingReview = await this.reviewModel.findOne({
       userId: new Types.ObjectId(userId),
       productId: new Types.ObjectId(productId),
+      orderId: new Types.ObjectId(orderId),
     });
 
     if (existingReview) {
       throw new BadRequestException('You have already reviewed this product');
     }
 
-    // Check if user has purchased this product and received it successfully
-    const successfulOrders = await this.orderModel.find({
+    // Validate orderId (now required)
+    const order = await this.orderModel.findOne({
+      _id: new Types.ObjectId(orderId),
       userId: new Types.ObjectId(userId),
       paymentStatus: PaymentStatus.COMPLETED,
       shippingStatus: ShippingStatus.DELIVERED,
       'items.productId': new Types.ObjectId(productId),
     });
 
-    if (!successfulOrders || successfulOrders.length === 0) {
-      throw new ForbiddenException('You can only review products that you have purchased and received');
+    if (!order) {
+      throw new BadRequestException('Invalid order ID or order does not contain this product');
     }
 
     // Create the review
     const review = new this.reviewModel({
       userId: new Types.ObjectId(userId),
       productId: new Types.ObjectId(productId),
+      orderId: new Types.ObjectId(orderId),
       rating,
       comment,
       images: images || [],
@@ -97,16 +100,18 @@ export class ProductReviewService {
         .skip(skip)
         .limit(limit)
         .populate('userId', 'username email avatar')
+        .populate('orderId', 'orderCode createdAt')
         .lean(),
       this.reviewModel.countDocuments(query),
       this.getProductRatingStats(productId),
     ]);
 
     const reviews = items.map((item) => {
-      const { userId, ...rest } = item;
+      const { userId, orderId, ...rest } = item;
       return {
         ...rest,
         user: userId,
+        order: orderId,
       };
     });
 
@@ -158,17 +163,19 @@ export class ProductReviewService {
         .limit(limit)
         .populate('userId', 'username email avatar')
         .populate('productId', 'name slug images')
+        .populate('orderId', 'orderCode createdAt')
         .lean(),
       this.reviewModel.countDocuments(query),
       this.getProductRatingStats(productId),
     ]);
 
     const reviews = items.map((item) => {
-      const { userId, productId, ...rest } = item;
+      const { userId, productId, orderId, ...rest } = item;
       return {
         ...rest,
         user: userId,
         product: productId,
+        order: orderId,
       };
     });
 
@@ -353,39 +360,96 @@ export class ProductReviewService {
       return [];
     }
 
-    // Extract all product IDs from completed orders
+    // Extract all product IDs from completed orders with order information
     const productItems = completedOrders.flatMap((order) =>
       order.items.map((item) => ({
         productId: item.productId,
+        orderId: order._id,
+        orderCode: order.orderCode,
+        orderDate: order.createdAt,
+        variantId: item.variantId,
+        quantity: item.quantity,
+        price: item.price,
       })),
     );
+
+    if (!productItems.length) {
+      return [];
+    }
 
     // Get unique product IDs
     const uniqueProductIds = [...new Set(productItems.map((item) => item.productId.toString()))];
 
-    // Find products that have already been reviewed
-    const reviewedProducts = await this.reviewModel.find({
+    // Find products that the user has already reviewed
+    const existingReviews = await this.reviewModel.find({
       userId: new Types.ObjectId(userId),
       productId: { $in: uniqueProductIds.map((id) => new Types.ObjectId(id)) },
     });
 
-    const reviewedProductIds = new Set(reviewedProducts.map((review) => review.productId.toString()));
-
-    // Filter out products that have already been reviewed
-    const reviewableProductIds = uniqueProductIds.filter((id) => !reviewedProductIds.has(id));
-
-    // Get product details for reviewable products
-    const products = await this.productModel.find({
-      _id: { $in: reviewableProductIds.map((id) => new Types.ObjectId(id)) },
+    const reviewedProductMap = new Map();
+    existingReviews.forEach((review) => {
+      // Create a key that combines productId and orderId
+      const key = `${review.productId.toString()}_${review.orderId.toString()}`;
+      reviewedProductMap.set(key, review);
     });
 
-    // Combine product details
-    return products.map((product) => ({
-      productId: product._id,
-      name: product.name,
-      image: product.images && product.images.length > 0 ? product.images[0] : null,
-      price: product.originalPrice,
-    }));
+    // Get product details
+    const products = await this.productModel.find({
+      _id: { $in: uniqueProductIds.map((id) => new Types.ObjectId(id)) },
+    });
+
+    const productMap = new Map();
+    products.forEach((product) => {
+      productMap.set(product._id.toString(), product);
+    });
+
+    // Group by product and include order information
+    const reviewableProducts = [];
+
+    // Process each product item
+    productItems.forEach((item) => {
+      const product = productMap.get(item.productId.toString());
+      if (!product) return;
+
+      // Check if this specific product-order combination has been reviewed
+      const key = `${item.productId.toString()}_${item.orderId.toString()}`;
+      const existingReview = reviewedProductMap.get(key);
+
+      // If already reviewed, skip
+      if (existingReview) return;
+
+      // Find if we already added this product to the result
+      let productEntry = reviewableProducts.find((p) => p._id.toString() === product._id.toString());
+
+      if (!productEntry) {
+        productEntry = {
+          _id: product._id,
+          name: product.name,
+          slug: product.slug,
+          images: product.images,
+          orders: [],
+        };
+        reviewableProducts.push(productEntry);
+      }
+
+      // Add order information if not already added
+      if (!productEntry.orders.some((o) => o.orderId.toString() === item.orderId.toString())) {
+        productEntry.orders.push({
+          orderId: item.orderId,
+          orderCode: item.orderCode,
+          orderDate: item.orderDate,
+          items: [
+            {
+              variantId: item.variantId,
+              quantity: item.quantity,
+              price: item.price,
+            },
+          ],
+        });
+      }
+    });
+
+    return reviewableProducts;
   }
 
   private async updateProductRating(productId: string): Promise<void> {
@@ -414,10 +478,11 @@ export class ProductReviewService {
     limit?: number;
     productId?: string;
     userId?: string;
+    orderId?: string;
     rating?: number;
     isActive?: boolean;
   }) {
-    const { page = 1, limit = 10, productId, userId, rating, isActive } = options;
+    const { page = 1, limit = 10, productId, userId, orderId, rating, isActive } = options;
     const skip = (page - 1) * limit;
 
     const query: any = {};
@@ -428,6 +493,10 @@ export class ProductReviewService {
 
     if (userId) {
       query.userId = new Types.ObjectId(userId);
+    }
+
+    if (orderId) {
+      query.orderId = new Types.ObjectId(orderId);
     }
 
     if (rating) {
@@ -446,16 +515,18 @@ export class ProductReviewService {
         .limit(limit)
         .populate('userId', 'username email avatar')
         .populate('productId', 'name slug images')
+        .populate('orderId', 'orderCode createdAt')
         .lean(),
       this.reviewModel.countDocuments(query),
     ]);
 
     const reviews = items.map((item) => {
-      const { userId, productId, ...rest } = item;
+      const { userId, productId, orderId, ...rest } = item;
       return {
         ...rest,
         user: userId,
         product: productId,
+        order: orderId,
       };
     });
 

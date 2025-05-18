@@ -79,12 +79,6 @@ export class Product {
   @Prop({ default: false })
   isOnSale?: boolean;
 
-  @Prop({ type: Date })
-  availableFrom?: Date;
-
-  @Prop({ type: Date })
-  availableTo?: Date;
-
   @Prop({ type: Number, default: 0 })
   viewCount?: number;
 
@@ -93,6 +87,12 @@ export class Product {
 
   @Prop({ type: Object })
   specifications?: Record<string, string>;
+
+  @Prop({ type: Number, default: 0 })
+  averageRating: number;
+
+  @Prop({ type: Number, default: 0 })
+  reviewCount: number;
 
   // Don't use getter/setter for virtual properties
   // This can cause infinite recursion
