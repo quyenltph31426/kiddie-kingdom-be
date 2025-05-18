@@ -7,10 +7,10 @@ export class UpdateCartItemDto {
   @IsString()
   productId: string;
 
-  @ApiProperty({ description: 'New quantity', minimum: 1, maximum: 10 })
+  @ApiProperty({ description: 'New quantity', minimum: 1, maximum: 1000 })
   @IsNumber()
   @Min(1)
-  @Max(10)
+  @Max(1000)
   quantity: number;
 
   @ApiPropertyOptional({ description: 'Variant ID (if applicable)' })

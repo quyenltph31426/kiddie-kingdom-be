@@ -9,11 +9,11 @@ import { JwtModule } from '@nestjs/jwt';
 
 @Module({
   imports: [
-    JwtModule.register({}),
     MongooseModule.forFeature([
       { name: Voucher.name, schema: VoucherSchema },
       { name: Admin.name, schema: AdminSchema },
     ]),
+    JwtModule.register({}),
   ],
   controllers: [VoucherAdminController, VoucherClientController],
   providers: [VoucherService],

@@ -11,12 +11,6 @@ export class ProductReview {
   @Prop({ type: Types.ObjectId, ref: 'Product', required: true })
   productId: Types.ObjectId;
 
-  @Prop({ type: Types.ObjectId, ref: 'Order', required: true })
-  orderId: Types.ObjectId;
-
-  @Prop({ type: Types.ObjectId, ref: 'OrderItem' })
-  orderItemId: Types.ObjectId;
-
   @Prop({ required: true, min: 1, max: 5 })
   rating: number;
 
@@ -37,16 +31,18 @@ export class ProductReview {
 
   @Prop({ type: Date })
   verifiedAt: Date;
+
+  @Prop({ type: Boolean, default: true })
+  isPurchased: boolean;
 }
 
 export const ProductReviewSchema = SchemaFactory.createForClass(ProductReview);
 
-// Add compound index to ensure a user can only review a product once per order
-ProductReviewSchema.index({ userId: 1, productId: 1, orderId: 1 }, { unique: true });
+// Add compound index to ensure a user can only review a product once
+ProductReviewSchema.index({ userId: 1, productId: 1 }, { unique: true });
 
 // Add indexes for better query performance
 ProductReviewSchema.index({ productId: 1, isActive: 1 });
 ProductReviewSchema.index({ userId: 1 });
-ProductReviewSchema.index({ orderId: 1 });
 ProductReviewSchema.index({ createdAt: -1 });
 ProductReviewSchema.index({ rating: -1 });

@@ -118,14 +118,7 @@ export class VoucherService {
     return { success: true };
   }
 
-  async verifyVoucher(verifyVoucherDto: VerifyVoucherDto): Promise<{
-    valid: boolean;
-    voucher?: Voucher;
-    discountAmount?: number;
-    message?: string;
-  }> {
-    const { code, orderAmount } = verifyVoucherDto;
-
+  async verifyVoucherByCode(code: string, orderAmount: number) {
     // Find voucher by code
     const voucher = await this.voucherModel.findOne({ code });
 
@@ -154,11 +147,11 @@ export class VoucherService {
       return { valid: false, message: 'Voucher usage limit reached' };
     }
 
-    // Check minimum order value
+    // Check if order meets minimum value requirement
     if (voucher.minOrderValue > 0 && orderAmount < voucher.minOrderValue) {
       return {
         valid: false,
-        message: `Minimum order amount is ${voucher.minOrderValue}`,
+        message: `Order amount must be at least ${voucher.minOrderValue} to use this voucher`,
       };
     }
 
@@ -188,8 +181,8 @@ export class VoucherService {
     };
   }
 
-  async applyVoucher(code: string): Promise<Voucher> {
-    const voucher = await this.voucherModel.findOne({ code });
+  async applyVoucherById(voucherId: string): Promise<Voucher> {
+    const voucher = await this.voucherModel.findById(voucherId);
 
     if (!voucher) {
       throw new NotFoundException('Voucher not found');
@@ -211,5 +204,15 @@ export class VoucherService {
       endDate: { $gte: now },
       status: VoucherStatus.ACTIVE,
     });
+  }
+
+  async findByCode(code: string): Promise<Voucher> {
+    const voucher = await this.voucherModel.findOne({ code });
+
+    if (!voucher) {
+      throw new NotFoundException('Voucher not found');
+    }
+
+    return voucher;
   }
 }

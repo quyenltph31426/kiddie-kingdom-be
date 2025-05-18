@@ -164,6 +164,8 @@ export class ProductClientService {
         primaryCategory: primaryCategoryId,
         brand: brandId,
         currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        totalQuantity: variants.reduce((acc, variant) => acc + variant.quantity, 0),
+        totalSoldCount: variants.reduce((acc, variant) => acc + (variant.soldCount || 0), 0),
         variants: variants.map((variant) => ({
           sku: variant.sku,
           price: variant.price,
@@ -269,6 +271,8 @@ export class ProductClientService {
         primaryCategory: primaryCategoryId,
         brand: brandId,
         currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        totalQuantity: variants.reduce((acc, variant) => acc + variant.quantity, 0),
+        totalSoldCount: variants.reduce((acc, variant) => acc + (variant.soldCount || 0), 0),
         variants: variants.map((variant) => ({
           sku: variant.sku,
           price: variant.price,
@@ -332,6 +336,8 @@ export class ProductClientService {
         primaryCategory: primaryCategoryId,
         brand: brandId,
         currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        totalQuantity: variants.reduce((acc, variant) => acc + variant.quantity, 0),
+        totalSoldCount: variants.reduce((acc, variant) => acc + (variant.soldCount || 0), 0),
         variants: variants.map((variant) => ({
           sku: variant.sku,
           price: variant.price,
@@ -400,6 +406,8 @@ export class ProductClientService {
         primaryCategory: primaryCategoryId,
         brand: brandId,
         currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        totalQuantity: variants.reduce((acc, variant) => acc + variant.quantity, 0),
+        totalSoldCount: variants.reduce((acc, variant) => acc + (variant.soldCount || 0), 0),
         variants: variants.map((variant) => ({
           sku: variant.sku,
           price: variant.price,

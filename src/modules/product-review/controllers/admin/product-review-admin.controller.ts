@@ -1,5 +1,5 @@
 import { Controller, Get, Patch, Param, Delete, Query, UseGuards, Body, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { AdminAuthGuard } from '@/modules/admin-auth/guards/admin-auth.guard';
 import { AdminRolesAllowed } from '@/shared/decorator/adminRoles.decorator';
 import { AdminRoles } from '@/shared/enums';
@@ -37,6 +37,35 @@ export class ProductReviewAdminController {
       rating,
       isActive,
     });
+  }
+
+  @Get('product/:productId')
+  @ApiOperation({ summary: 'Get product reviews with stats (admin)' })
+  @ApiParam({ name: 'productId', description: 'Product ID' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'rating', required: false, type: Number })
+  @ApiQuery({ name: 'isActive', required: false, type: Boolean })
+  getProductReviews(
+    @Param('productId') productId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('rating') rating?: number,
+    @Query('isActive') isActive?: boolean,
+  ) {
+    return this.reviewService.getProductReviewsAdmin(productId, {
+      page,
+      limit,
+      rating,
+      isActive,
+    });
+  }
+
+  @Get('product/:productId/stats')
+  @ApiOperation({ summary: 'Get product rating statistics (admin)' })
+  @ApiParam({ name: 'productId', description: 'Product ID' })
+  getProductRatingStats(@Param('productId') productId: string) {
+    return this.reviewService.getProductRatingStats(productId);
   }
 
   @Get(':id')

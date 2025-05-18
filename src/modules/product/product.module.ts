@@ -8,6 +8,7 @@ import { ProductAdminController } from './controllers/admin/product-admin.contro
 import { ProductClientController } from './controllers/client/product-client.controller';
 import { ProductAdminService } from './services/product-admin.service';
 import { ProductClientService } from './services/product-client.service';
+import { ProductService } from './services/product.service';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { ProductClientService } from './services/product-client.service';
     ]),
   ],
   controllers: [ProductAdminController, ProductClientController],
-  providers: [ProductAdminService, ProductClientService],
-  exports: [ProductAdminService, ProductClientService],
+  providers: [ProductAdminService, ProductClientService, ProductService],
+  exports: [ProductAdminService, ProductClientService, ProductService],
 })
 export class ProductModule {}

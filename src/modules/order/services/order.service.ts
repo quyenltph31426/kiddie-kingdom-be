@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from '@/database/schemas/order.schema';
@@ -6,17 +6,30 @@ import { CreateOrderDto } from '../dto/create-order.dto';
 import { OrderStatus, PAYMENT_METHOD, PaymentStatus, ShippingStatus } from '@/shared/enums';
 import { PaymentService } from './payment.service';
 import { Product, ProductDocument } from '@/database/schemas/product.schema';
+import { VoucherService } from '@/modules/voucher/services/voucher.service';
+import { Voucher, VoucherDocument } from '@/database/schemas/voucher.schema';
+import { ProductService } from '@/modules/product/services/product.service';
 
 interface OrderWithPayment extends Order {
   paymentSession?: any;
+  appliedVoucher?: {
+    code: string;
+    name: string;
+    discountAmount: number;
+  } | null;
 }
 
 @Injectable()
 export class OrderService {
+  private readonly logger = new Logger(OrderService.name);
+
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+    @InjectModel(Voucher.name) private voucherModel: Model<VoucherDocument>,
     private paymentService: PaymentService,
+    private voucherService: VoucherService,
+    private productService: ProductService,
   ) {}
 
   async create(createOrderDto: CreateOrderDto, userId: string): Promise<OrderWithPayment> {
@@ -107,8 +120,50 @@ export class OrderService {
     );
 
     try {
-      // Calculate total amount
-      const totalAmount = orderItems.reduce((total, item) => total + item.price * item.quantity, 0);
+      // Calculate subtotal amount (before discount)
+      const subtotal = orderItems.reduce((total, item) => total + item.price * item.quantity, 0);
+
+      // Initialize discount amount
+      let discountAmount = 0;
+      let appliedVoucher = null;
+
+      // Apply voucher if provided
+      if (voucherId) {
+        // Validate voucher ID format
+        if (!Types.ObjectId.isValid(voucherId)) {
+          throw new BadRequestException(`Invalid voucher ID format: ${voucherId}`);
+        }
+
+        try {
+          // Find voucher by ID first
+          const voucher = await this.voucherModel.findById(voucherId);
+          if (!voucher) {
+            throw new BadRequestException('Voucher not found');
+          }
+
+          // Verify voucher with the subtotal
+          const verifyResult = await this.voucherService.verifyVoucherByCode(voucher.code, subtotal);
+
+          if (!verifyResult.valid) {
+            throw new BadRequestException(`Voucher validation failed: ${verifyResult.message}`);
+          }
+
+          // Set discount amount from voucher verification
+          discountAmount = verifyResult.discountAmount;
+          appliedVoucher = verifyResult.voucher;
+
+          // Apply the voucher (increment usage count)
+          await this.voucherService.applyVoucherById(voucherId);
+        } catch (error) {
+          if (error instanceof BadRequestException) {
+            throw error;
+          }
+          throw new BadRequestException(`Error applying voucher: ${error.message}`);
+        }
+      }
+
+      // Calculate final total amount after discount
+      const totalAmount = Math.max(0, subtotal - discountAmount);
 
       // Generate unique order number
       const timestamp = new Date().getTime().toString().slice(-8);
@@ -122,6 +177,7 @@ export class OrderService {
         userId: new Types.ObjectId(userId),
         items: orderItems,
         paymentMethod,
+        orderCode,
         shippingAddress: {
           fullName: shippingAddress.fullName,
           phone: shippingAddress.phone,
@@ -136,12 +192,29 @@ export class OrderService {
         paymentStatus: PaymentStatus.PENDING,
         shippingStatus: ShippingStatus.PENDING,
         totalAmount: totalAmount,
-        orderCode: orderCode,
-        discountAmount: 0, // Set default discount amount
+        discountAmount: discountAmount,
       });
 
       // Save the order
       const savedOrder = await order.save();
+
+      // Update product variant stock
+      try {
+        for (const item of orderItems) {
+          if (item.productId && item.variantId) {
+            await this.productService.updateVariantStockOnOrder(
+              item.productId.toString(),
+              item.variantId.toString(),
+              item.quantity,
+              true, // isOrderCreation = true
+            );
+          }
+        }
+      } catch (error) {
+        this.logger.error(`Failed to update product variant stock: ${error.message}`);
+        // Consider rolling back the order if stock update fails
+        // For now, we'll continue as the order is already created
+      }
 
       // If online payment, create payment session
       if (paymentMethod === PAYMENT_METHOD.ONLINE_PAYMENT) {
@@ -150,10 +223,26 @@ export class OrderService {
         return {
           ...savedOrder.toObject(),
           paymentSession,
+          appliedVoucher: appliedVoucher
+            ? {
+                code: appliedVoucher.code,
+                name: appliedVoucher.name,
+                discountAmount,
+              }
+            : null,
         };
       }
 
-      return savedOrder;
+      return {
+        ...savedOrder.toObject(),
+        appliedVoucher: appliedVoucher
+          ? {
+              code: appliedVoucher.code,
+              name: appliedVoucher.name,
+              discountAmount,
+            }
+          : null,
+      };
     } catch (error) {
       console.error('Error creating order:', error);
       throw new BadRequestException(`Failed to create order: ${error.message}`);
@@ -274,6 +363,23 @@ export class OrderService {
 
     order.paymentStatus = PaymentStatus.FAILED;
     order.shippingStatus = ShippingStatus.CANCELED;
+
+    // Restore product quantities
+    try {
+      for (const item of order.items) {
+        if (item.productId && item.variantId) {
+          await this.productService.updateVariantStockOnOrder(
+            item.productId.toString(),
+            item.variantId.toString(),
+            item.quantity,
+            false, // isOrderCreation = false (restoring stock)
+          );
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to restore product quantities: ${error.message}`);
+      // Continue with order cancellation even if stock restoration fails
+    }
 
     return order.save();
   }

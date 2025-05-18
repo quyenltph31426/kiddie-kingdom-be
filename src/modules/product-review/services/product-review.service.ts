@@ -7,11 +7,7 @@ import { Order, OrderDocument } from '@/database/schemas/order.schema';
 import { CreateProductReviewDto } from '../dto/create-product-review.dto';
 import { UpdateProductReviewDto } from '../dto/update-product-review.dto';
 import { AdminUpdateReviewDto } from '../dto/admin-update-review.dto';
-
-enum PaymentStatus {
-  COMPLETED = 'COMPLETED',
-  // Add other payment statuses if needed
-}
+import { PaymentStatus, ShippingStatus } from '@/shared/enums';
 
 @Injectable()
 export class ProductReviewService {
@@ -22,7 +18,7 @@ export class ProductReviewService {
   ) {}
 
   async create(userId: string, createReviewDto: CreateProductReviewDto): Promise<ProductReview> {
-    const { productId, orderId, orderItemId, rating, comment, images } = createReviewDto;
+    const { productId, rating, comment, images } = createReviewDto;
 
     // Check if product exists
     const product = await this.productModel.findById(productId);
@@ -30,50 +26,36 @@ export class ProductReviewService {
       throw new NotFoundException('Product not found');
     }
 
-    // Check if order exists and belongs to the user
-    const order = await this.orderModel.findOne({
-      _id: orderId,
-      userId: new Types.ObjectId(userId),
-    });
-
-    if (!order) {
-      throw new NotFoundException('Order not found or does not belong to you');
-    }
-
-    // Check if order is completed (paid)
-    if (order.paymentStatus !== PaymentStatus.COMPLETED) {
-      throw new BadRequestException('You can only review products from completed orders');
-    }
-
-    // Check if the product is in the order
-    const orderContainsProduct = order.items.some(
-      (item) => item.productId.toString() === productId && (!orderItemId || item._id.toString() === orderItemId),
-    );
-
-    if (!orderContainsProduct) {
-      throw new BadRequestException('This product is not in the specified order');
-    }
-
-    // Check if user already reviewed this product for this order
+    // Check if user already reviewed this product
     const existingReview = await this.reviewModel.findOne({
       userId: new Types.ObjectId(userId),
       productId: new Types.ObjectId(productId),
-      orderId: new Types.ObjectId(orderId),
     });
 
     if (existingReview) {
-      throw new BadRequestException('You have already reviewed this product for this order');
+      throw new BadRequestException('You have already reviewed this product');
+    }
+
+    // Check if user has purchased this product and received it successfully
+    const successfulOrders = await this.orderModel.find({
+      userId: new Types.ObjectId(userId),
+      paymentStatus: PaymentStatus.COMPLETED,
+      shippingStatus: ShippingStatus.DELIVERED,
+      'items.productId': new Types.ObjectId(productId),
+    });
+
+    if (!successfulOrders || successfulOrders.length === 0) {
+      throw new ForbiddenException('You can only review products that you have purchased and received');
     }
 
     // Create the review
     const review = new this.reviewModel({
       userId: new Types.ObjectId(userId),
       productId: new Types.ObjectId(productId),
-      orderId: new Types.ObjectId(orderId),
-      orderItemId: orderItemId ? new Types.ObjectId(orderItemId) : undefined,
       rating,
       comment,
       images: images || [],
+      isPurchased: true,
     });
 
     const savedReview = await review.save();
@@ -84,26 +66,81 @@ export class ProductReviewService {
     return savedReview;
   }
 
-  async findAll(options: {
-    page?: number;
-    limit?: number;
-    productId?: string;
-    userId?: string;
-    rating?: number;
-    isActive?: boolean;
-  }): Promise<{ items: ProductReview[]; meta: any }> {
-    const { page = 1, limit = 10, productId, userId, rating, isActive = true } = options;
+  async getProductReviews(
+    productId: string,
+    options: {
+      page?: number;
+      limit?: number;
+      rating?: number;
+    },
+  ) {
+    if (!productId) {
+      throw new BadRequestException('Product ID is required');
+    }
+
+    const { page = 1, limit = 10, rating } = options;
     const skip = (page - 1) * limit;
 
-    const query: any = {};
+    const query: any = {
+      productId: new Types.ObjectId(productId),
+      isActive: true,
+    };
 
-    if (productId) {
-      query.productId = new Types.ObjectId(productId);
+    if (rating) {
+      query.rating = rating;
     }
 
-    if (userId) {
-      query.userId = new Types.ObjectId(userId);
+    const [items, total, ratingStats] = await Promise.all([
+      this.reviewModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('userId', 'username email avatar')
+        .lean(),
+      this.reviewModel.countDocuments(query),
+      this.getProductRatingStats(productId),
+    ]);
+
+    const reviews = items.map((item) => {
+      const { userId, ...rest } = item;
+      return {
+        ...rest,
+        user: userId,
+      };
+    });
+
+    return {
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+      ratingStats,
+      items: reviews,
+    };
+  }
+
+  async getProductReviewsAdmin(
+    productId: string,
+    options: {
+      page?: number;
+      limit?: number;
+      rating?: number;
+      isActive?: boolean;
+    },
+  ) {
+    if (!productId) {
+      throw new BadRequestException('Product ID is required');
     }
+
+    const { page = 1, limit = 10, rating, isActive } = options;
+    const skip = (page - 1) * limit;
+
+    const query: any = {
+      productId: new Types.ObjectId(productId),
+    };
 
     if (rating) {
       query.rating = rating;
@@ -113,25 +150,99 @@ export class ProductReviewService {
       query.isActive = isActive;
     }
 
-    const [reviews, total] = await Promise.all([
+    const [items, total, ratingStats] = await Promise.all([
       this.reviewModel
         .find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate('userId', 'name avatar')
-        .exec(),
+        .populate('userId', 'username email avatar')
+        .populate('productId', 'name slug images')
+        .lean(),
       this.reviewModel.countDocuments(query),
+      this.getProductRatingStats(productId),
     ]);
 
+    const reviews = items.map((item) => {
+      const { userId, productId, ...rest } = item;
+      return {
+        ...rest,
+        user: userId,
+        product: productId,
+      };
+    });
+
     return {
-      items: reviews,
       meta: {
         total,
         page,
         limit,
         totalPages: Math.ceil(total / limit),
       },
+      ratingStats,
+      items: reviews,
+    };
+  }
+
+  async getProductRatingStats(productId: string) {
+    const stats = await this.reviewModel.aggregate([
+      {
+        $match: {
+          productId: new Types.ObjectId(productId),
+          isActive: true,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalReviews: { $sum: 1 },
+          averageRating: { $avg: '$rating' },
+          ratingCounts: {
+            $push: '$rating',
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalReviews: 1,
+          averageRating: { $round: ['$averageRating', 1] },
+          ratingCounts: 1,
+        },
+      },
+    ]);
+
+    if (!stats.length) {
+      return {
+        totalReviews: 0,
+        averageRating: 0,
+        ratingDistribution: {
+          1: 0,
+          2: 0,
+          3: 0,
+          4: 0,
+          5: 0,
+        },
+      };
+    }
+
+    // Calculate rating distribution
+    const ratingDistribution = {
+      1: 0,
+      2: 0,
+      3: 0,
+      4: 0,
+      5: 0,
+    };
+
+    stats[0].ratingCounts.forEach((rating) => {
+      ratingDistribution[rating] = (ratingDistribution[rating] || 0) + 1;
+    });
+
+    return {
+      totalReviews: stats[0].totalReviews,
+      averageRating: stats[0].averageRating,
+      ratingDistribution,
     };
   }
 
@@ -231,10 +342,11 @@ export class ProductReviewService {
   }
 
   async getUserReviewableProducts(userId: string): Promise<any[]> {
-    // Find completed orders for the user
+    // Find completed and delivered orders for the user
     const completedOrders = await this.orderModel.find({
       userId: new Types.ObjectId(userId),
       paymentStatus: PaymentStatus.COMPLETED,
+      shippingStatus: ShippingStatus.DELIVERED,
     });
 
     if (!completedOrders.length) {
@@ -242,60 +354,38 @@ export class ProductReviewService {
     }
 
     // Extract all product IDs from completed orders
-    const orderIds = completedOrders.map((order) => order._id);
     const productItems = completedOrders.flatMap((order) =>
       order.items.map((item) => ({
         productId: item.productId,
-        orderId: order._id,
-        orderItemId: item._id,
       })),
     );
+
+    // Get unique product IDs
+    const uniqueProductIds = [...new Set(productItems.map((item) => item.productId.toString()))];
 
     // Find products that have already been reviewed
     const reviewedProducts = await this.reviewModel.find({
       userId: new Types.ObjectId(userId),
-      orderId: { $in: orderIds },
+      productId: { $in: uniqueProductIds.map((id) => new Types.ObjectId(id)) },
     });
 
-    const reviewedProductMap = new Map();
-    reviewedProducts.forEach((review) => {
-      const key = `${review.productId.toString()}-${review.orderId.toString()}`;
-      reviewedProductMap.set(key, true);
-    });
+    const reviewedProductIds = new Set(reviewedProducts.map((review) => review.productId.toString()));
 
     // Filter out products that have already been reviewed
-    const reviewableProducts = productItems.filter((item) => {
-      const key = `${item.productId.toString()}-${item.orderId.toString()}`;
-      return !reviewedProductMap.has(key);
-    });
+    const reviewableProductIds = uniqueProductIds.filter((id) => !reviewedProductIds.has(id));
 
     // Get product details for reviewable products
-    const productIds = [...new Set(reviewableProducts.map((item) => item.productId))];
     const products = await this.productModel.find({
-      _id: { $in: productIds },
+      _id: { $in: reviewableProductIds.map((id) => new Types.ObjectId(id)) },
     });
 
-    const productMap = new Map();
-    products.forEach((product) => {
-      productMap.set(product._id.toString(), product);
-    });
-
-    // Combine product details with order information
-    return reviewableProducts
-      .map((item) => {
-        const product = productMap.get(item.productId.toString());
-        if (!product) return null;
-
-        return {
-          productId: item.productId,
-          orderId: item.orderId,
-          orderItemId: item.orderItemId,
-          name: product.name,
-          image: product.images && product.images.length > 0 ? product.images[0] : null,
-          price: product.price,
-        };
-      })
-      .filter(Boolean);
+    // Combine product details
+    return products.map((product) => ({
+      productId: product._id,
+      name: product.name,
+      image: product.images && product.images.length > 0 ? product.images[0] : null,
+      price: product.originalPrice,
+    }));
   }
 
   private async updateProductRating(productId: string): Promise<void> {
@@ -317,5 +407,66 @@ export class ProductReviewService {
       averageRating,
       reviewCount: reviews.length,
     });
+  }
+
+  async findAll(options: {
+    page?: number;
+    limit?: number;
+    productId?: string;
+    userId?: string;
+    rating?: number;
+    isActive?: boolean;
+  }) {
+    const { page = 1, limit = 10, productId, userId, rating, isActive } = options;
+    const skip = (page - 1) * limit;
+
+    const query: any = {};
+
+    if (productId) {
+      query.productId = new Types.ObjectId(productId);
+    }
+
+    if (userId) {
+      query.userId = new Types.ObjectId(userId);
+    }
+
+    if (rating) {
+      query.rating = rating;
+    }
+
+    if (isActive !== undefined) {
+      query.isActive = isActive;
+    }
+
+    const [items, total] = await Promise.all([
+      this.reviewModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('userId', 'username email avatar')
+        .populate('productId', 'name slug images')
+        .lean(),
+      this.reviewModel.countDocuments(query),
+    ]);
+
+    const reviews = items.map((item) => {
+      const { userId, productId, ...rest } = item;
+      return {
+        ...rest,
+        user: userId,
+        product: productId,
+      };
+    });
+
+    return {
+      items: reviews,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 }

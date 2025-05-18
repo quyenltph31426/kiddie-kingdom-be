@@ -11,7 +11,7 @@ export class CartItem {
   @Prop({ type: Types.ObjectId })
   variantId: Types.ObjectId;
 
-  @Prop({ required: true, min: 1, max: 10 })
+  @Prop({ required: true, min: 1, max: 1000 })
   quantity: number;
 
   _id?: string;
