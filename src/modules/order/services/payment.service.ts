@@ -256,7 +256,7 @@ export class PaymentService {
         // Redirect to success page
         return {
           success: true,
-          redirectUrl: `${this.frontendUrl}/payment/success?orderId=${orderId}`,
+          redirectUrl: `${this.frontendUrl}/orders/${orderId}`,
           message: 'Payment successful',
         };
       } else {
