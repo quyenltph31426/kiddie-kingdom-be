@@ -26,6 +26,7 @@ import { VoucherModule } from './modules/voucher/voucher.module';
 import { ProductReviewModule } from './modules/product-review/product-review.module';
 import { SearchModule } from './modules/search/search.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { RecommendationModule } from './modules/recommendation/recommendation.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     ProductReviewModule,
     SearchModule,
     DashboardModule,
+    RecommendationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

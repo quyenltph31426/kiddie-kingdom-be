@@ -44,12 +44,16 @@ export class ProductClientService {
     const skip = (page - 1) * limit;
     const query: any = { isActive: true };
 
-    if (categoryId) {
+    // Kiểm tra và xử lý categoryId
+    if (categoryId && isValidObjectId(categoryId)) {
       query.categories = new Types.ObjectId(categoryId);
+    } else if (categoryId) {
     }
 
-    if (brandId) {
+    // Kiểm tra và xử lý brandId
+    if (brandId && isValidObjectId(brandId)) {
       query.brandId = new Types.ObjectId(brandId);
+    } else if (brandId) {
     }
 
     if (tags && tags.length > 0) {
@@ -295,14 +299,18 @@ export class ProductClientService {
   }
 
   async getBestSellerProducts(limit: number = 10, page: number = 1, userId: string | null = null) {
-    const skip = (page - 1) * limit;
+    // Đảm bảo limit và page là số nguyên hợp lệ
+    const validLimit = Math.max(1, Math.floor(Number(limit) || 10));
+    const validPage = Math.max(1, Math.floor(Number(page) || 1));
+    const skip = (validPage - 1) * validLimit;
+
     const query = {
       isActive: true,
       $or: [{ isBestSeller: true }, { 'variants.soldCount': { $gt: 0 } }],
     };
 
     // Sử dụng aggregation để tính tổng soldCount từ variants
-    const aggregationPipeline = [
+    const aggregationPipeline: any[] = [
       { $match: query },
       {
         $addFields: {
@@ -319,16 +327,17 @@ export class ProductClientService {
       },
       { $sort: { calculatedTotalSoldCount: -1, viewCount: -1 } },
       { $skip: skip },
-      { $limit: limit },
+      { $limit: validLimit },
     ];
 
     const [items, totalCount] = await Promise.all([
-      this.productModel.aggregate(aggregationPipeline as any),
+      this.productModel.aggregate(aggregationPipeline),
       this.productModel.countDocuments(query),
     ]);
 
     // Populate references manually after aggregation
     await this.productModel.populate(items, [
+      { path: 'categories', select: 'name slug' },
       { path: 'primaryCategoryId', select: 'name slug' },
       { path: 'brandId', select: 'name slug' },
     ]);
@@ -371,9 +380,9 @@ export class ProductClientService {
       items: products,
       meta: {
         total: totalCount,
-        page,
-        limit,
-        totalPages: Math.ceil(totalCount / limit),
+        page: validPage,
+        limit: validLimit,
+        totalPages: Math.ceil(totalCount / validLimit),
       },
     };
   }
