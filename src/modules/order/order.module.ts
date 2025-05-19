@@ -18,6 +18,7 @@ import { Admin, AdminSchema } from '@/database/schemas/admin.schema';
 import { EmailModule } from '../email/email.module';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module';
 import { UserModule } from '../user/user.module';
+import { PaymentController } from './controllers/payment.controller';
 
 @Module({
   imports: [
@@ -39,7 +40,7 @@ import { UserModule } from '../user/user.module';
     UserModule,
     VoucherModule,
   ],
-  controllers: [OrderClientController, OrderAdminController],
+  controllers: [PaymentController, OrderClientController, OrderAdminController],
   providers: [OrderService, OrderAdminService, PaymentService],
   exports: [OrderService, OrderAdminService, PaymentService],
 })

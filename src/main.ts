@@ -17,8 +17,8 @@ async function bootstrap() {
   });
 
   const config = new DocumentBuilder()
-    .setTitle('Battle example')
-    .setDescription('The battle ao API description')
+    .setTitle('Kiddie Kingdom')
+    .setDescription('The kiddie kingdom API description')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
