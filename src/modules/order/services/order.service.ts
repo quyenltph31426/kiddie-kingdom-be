@@ -295,20 +295,16 @@ export class OrderService {
       });
     });
 
-    // Lấy danh sách các đánh giá của user
     const userReviews = await this.reviewModel.find({
       userId: new Types.ObjectId(userId),
       productId: { $in: productIds },
+      orderId: { $in: orders.map((order) => order._id) },
     });
 
-    // Tạo map để kiểm tra nhanh sản phẩm nào đã được đánh giá
     const reviewedProductMap = new Map();
     userReviews.forEach((review) => {
-      reviewedProductMap.set(review.productId.toString(), {
-        reviewId: review._id,
-        rating: review.rating,
-        comment: review.comment,
-      });
+      const key = `${review.productId.toString()}_${review.orderId.toString()}`;
+      reviewedProductMap.set(key, true);
     });
 
     const enrichedOrders = orders.map((order) => {
@@ -316,13 +312,14 @@ export class OrderService {
 
       const enrichedItems = orderObj.items.map((item) => {
         const productInfo = productMap.get(item.productId.toString());
-        const reviewInfo = reviewedProductMap.get(item.productId.toString());
+
+        const reviewKey = `${item.productId.toString()}_${orderObj._id.toString()}`;
+        const isReviewed = reviewedProductMap.has(reviewKey);
 
         if (!productInfo) {
           return {
             ...item,
-            isReviewed: !!reviewInfo,
-            reviewInfo: reviewInfo || null,
+            isReviewed,
           };
         }
 
@@ -336,22 +333,13 @@ export class OrderService {
           productName: productInfo.name,
           productImage: productInfo.image,
           attributes: variantInfo ? variantInfo.attributes : {},
-          isReviewed: !!reviewInfo,
-          reviewInfo: reviewInfo || null,
+          isReviewed,
         };
       });
-
-      // Kiểm tra xem tất cả các sản phẩm trong đơn hàng đã được đánh giá chưa
-      const allItemsReviewed = enrichedItems.every((item) => item.isReviewed);
-      const someItemsReviewed = enrichedItems.some((item) => item.isReviewed);
 
       return {
         ...orderObj,
         items: enrichedItems,
-        reviewStatus: {
-          allItemsReviewed,
-          someItemsReviewed,
-        },
       };
     });
 
