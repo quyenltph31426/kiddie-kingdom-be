@@ -1,24 +1,19 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OAuth2Client } from 'google-auth-library';
 import { GoogleAuthenData } from '@/shared/interfaces/google-authen-data';
+import axios from 'axios';
 
 @Injectable()
 export class GoogleAuthService {
-  private oAuth2Client: OAuth2Client;
-
-  constructor(private configService: ConfigService) {
-    this.oAuth2Client = new OAuth2Client(this.configService.get<string>('app.clientId'));
-  }
+  constructor(private configService: ConfigService) {}
 
   async verify(token: string): Promise<GoogleAuthenData> {
     try {
-      const ticket = await this.oAuth2Client.verifyIdToken({
-        idToken: token,
-        audience: this.configService.get<string>('app.clientId'),
-      });
+      // Verify token using Google's tokeninfo endpoint
+      const response = await axios.get(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`);
 
-      const payload = ticket.getPayload();
+      const payload = response.data;
+
       if (!payload || !payload.email || !payload.email_verified) {
         throw new UnauthorizedException('Invalid token payload or email not verified');
       }
@@ -27,9 +22,10 @@ export class GoogleAuthService {
         email: payload.email,
         name: payload.name || '',
         picture: payload.picture || '',
-        email_verified: payload.email_verified,
+        email_verified: payload.email_verified === 'true' || payload.email_verified === true,
       };
     } catch (error) {
+      console.log(error);
       throw new UnauthorizedException('Invalid Google token');
     }
   }

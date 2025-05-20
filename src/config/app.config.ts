@@ -5,6 +5,8 @@ export default registerAs('app', () => ({
   apiKey: process.env.CLIENT_SECRET_KEY,
   clientScope: process.env.CLIENT_SCOPE,
   clientId: process.env.CLIENT_ID,
+  googleClientId: process.env.GOOGLE_CLIENT_ID,
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
 
   accessTokenKey: `a_${process.env.CLIENT_ID}`,
   refreshTokenKey: `r_${process.env.CLIENT_ID}`,
