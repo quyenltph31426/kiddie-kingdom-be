@@ -79,7 +79,7 @@ export class Order {
   @Prop({ type: Date })
   deliveredAt: Date;
 
-  @Prop({ type: Object })
+  @Prop({ type: Object, required: true })
   shippingAddress: {
     fullName: string;
     phone: string;
@@ -90,6 +90,12 @@ export class Order {
     ward?: string;
     postalCode?: string;
   };
+
+  @Prop({ type: Date, default: null, required: false })
+  cancelledAt: Date;
+
+  @Prop({ type: String, default: null, required: false })
+  cancelledReason: string;
 
   // Explicitly define timestamps
   createdAt: Date;

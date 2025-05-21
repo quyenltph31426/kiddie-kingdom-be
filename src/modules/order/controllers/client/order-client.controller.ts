@@ -5,6 +5,7 @@ import { OrderService } from '../../services/order.service';
 import { CreateOrderDto } from '../../dto/create-order.dto';
 import { UserAddressService } from '@/modules/user/services/user-address.service';
 import { PaymentStatus, ShippingStatus } from '@/shared/enums';
+import { CancelOrderDto } from '../../dto/cancel-order.dto';
 
 @ApiTags('Orders')
 @Controller('orders')
@@ -68,5 +69,11 @@ export class OrderClientController {
   @ApiOperation({ summary: 'Get order details' })
   findOne(@Param('id') id: string, @Request() req) {
     return this.orderService.getOrderDetails(id, req.user.sub);
+  }
+
+  @Post(':id/cancel')
+  @ApiOperation({ summary: 'Cancel an order' })
+  async cancelOrder(@Param('id') id: string, @Body() cancelOrderDto: CancelOrderDto, @Request() req): Promise<any> {
+    return this.orderService.cancelCashOnDeliveryOrder(id, req.user.sub, cancelOrderDto.reason);
   }
 }

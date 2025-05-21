@@ -228,6 +228,16 @@ export class ProductClientService {
 
     const productResult = {
       ...result,
+      totalSoldCount: result.variants.reduce((acc, variant) => acc + (variant.soldCount || 0), 0),
+      variants: result.variants.map((variant) => ({
+        sku: variant.sku,
+        price: variant.price,
+        quantity: variant.quantity,
+        attributes: variant.attributes,
+        _id: variant._id,
+      })),
+      primaryCategory: result.primaryCategoryId,
+      brand: result.brandId,
       totalQuantity: result.variants.reduce((acc, variant) => acc + variant.quantity, 0),
       currentPrice,
     };

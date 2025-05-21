@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  Logger,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from '@/database/schemas/order.schema';
@@ -424,5 +430,55 @@ export class OrderService {
     }
 
     return this.paymentService.createPaymentSession(id, userId);
+  }
+
+  async cancelCashOnDeliveryOrder(id: string, userId: string, cancelledReason?: string): Promise<Order> {
+    const order = await this.orderModel.findOne({
+      _id: new Types.ObjectId(id),
+      userId: new Types.ObjectId(userId),
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Only allow cancellation of orders that are CASH_ON_DELIVERY and in PENDING shipping status
+    if (order.paymentMethod !== PAYMENT_METHOD.CASH_ON_DELIVERY) {
+      throw new BadRequestException('Only Cash on Delivery orders can be canceled');
+    }
+
+    if (order.paymentStatus !== PaymentStatus.PENDING) {
+      throw new BadRequestException('Cannot cancel order in current payment status');
+    }
+
+    if (order.shippingStatus !== ShippingStatus.PENDING) {
+      throw new BadRequestException('Only orders with PENDING shipping status can be canceled');
+    }
+
+    // Update order status
+    order.shippingStatus = ShippingStatus.CANCELED;
+    order.cancelledAt = new Date();
+    order.cancelledReason = cancelledReason;
+
+    // Restore product quantities
+    try {
+      console.log(order.items);
+      for (const item of order.items) {
+        if (item.productId && item.variantId) {
+          await this.productService.updateVariantStockOnOrder(
+            item.productId.toString(),
+            item.variantId.toString(),
+            item.quantity,
+            false, // isOrderCreation = false (restoring stock)
+          );
+        }
+      }
+    } catch (error) {
+      this.logger.error(`Failed to restore product quantities: ${error.message}`);
+      throw new InternalServerErrorException(`Failed to restore product quantities: ${error.message}`);
+      // Continue with order cancellation even if stock restoration fails
+    }
+
+    return order.save();
   }
 }
