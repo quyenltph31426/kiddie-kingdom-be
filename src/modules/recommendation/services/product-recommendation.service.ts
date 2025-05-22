@@ -15,7 +15,6 @@ export class ProductRecommendationService {
     @InjectModel(Product.name) private readonly productModel: Model<Product>,
     private readonly configService: ConfigService,
   ) {
-    // Khởi tạo Google Generative AI
     const apiKey = this.configService.get<string>('GOOGLE_AI_API_KEY');
     if (!apiKey) {
       this.logger.error('GOOGLE_AI_API_KEY is not defined in environment variables');
@@ -105,10 +104,11 @@ export class ProductRecommendationService {
 
         🔹 CASE 2: The user is asking a general question, browsing, or just chatting:
         - Respond ONLY with a single HTML block.
-        - The response must be pure HTML and wrapped in one pair of <div> tags.
-        - Use basic HTML tags like <p>, <ul>, <strong> for formatting.
-        - ⚠️ DO NOT use markdown syntax like \`\`\` or \`\`\`html.
-        - DO NOT include any explanation, formatting indicators, or content outside the HTML block.
+
+        ⚠️ IMPORTANT: If you choose CASE 2, your output MUST be a plain HTML string.
+        - DO NOT use \\\`\\\`\\\` hoặc \\\`\\\`\\\` html or any markdown formatting.
+        - The output must be a single string that starts with <div> and ends with </div>.
+        - There must be absolutely nothing before or after the HTML block.
 
         ✅ Example of a valid response:
         <div>
