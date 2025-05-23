@@ -35,34 +35,24 @@ export class CartService {
     const transformedItems = cart.items
       .map((item) => {
         const product = item.productId as any;
-        if (!product) return null;
+        if (!product || !product.variants || product.variants.length === 0) return null;
 
-        // Find variant if variantId exists
         let price = product.originalPrice;
         let attributes = {};
         let totalQuantity = 0;
 
-        if (product.variants && product.variants.length > 0) {
-          // Get total quantity across all variants
-          totalQuantity =
-            product.variants.find((v) => v._id && v._id.toString() === item.variantId.toString())?.quantity || 0;
+        const variant = item.variantId
+          ? product.variants.find((v) => v._id && v._id.toString() === item.variantId.toString())
+          : null;
 
-          // If there's a variantId, find the specific variant
-          if (item.variantId) {
-            const variant = product.variants.find((v) => v._id && v._id.toString() === item.variantId.toString());
+        if (!variant) return null;
 
-            if (variant) {
-              price =
-                variant.price ||
-                (variant.salePrice && product.isOnSale ? variant.salePrice : variant.price) ||
-                product.originalPrice;
-              attributes = variant.attributes || {};
-            }
-          } else {
-            // If no variantId, use the first variant or default price
-            price = product.variants[0].price || product.originalPrice;
-          }
-        }
+        totalQuantity = variant.quantity || 0;
+        price =
+          variant.price ??
+          (variant.salePrice && product.isOnSale ? variant.salePrice : undefined) ??
+          product.originalPrice;
+        attributes = variant.attributes || {};
 
         return {
           _id: item._id.toString(),
@@ -84,7 +74,7 @@ export class CartService {
     };
   }
 
-  async addToCart(userId: string, productId: string, quantity: number, variantId?: string) {
+  async addToCart(userId: string, productId: string, quantity: number, variantId: string) {
     // Validate quantity
     if (quantity < MIN_QUANTITY_PER_ITEM) {
       throw new BadRequestException(`Quantity must be at least ${MIN_QUANTITY_PER_ITEM}`);
@@ -104,6 +94,20 @@ export class CartService {
       throw new BadRequestException('Product is not available');
     }
 
+    // Validate variant if applicable
+    let variantObjectId = null;
+    if (product.variants && product.variants.length > 0) {
+      if (!variantId) {
+        throw new BadRequestException('Variant ID is required for this product');
+      }
+
+      variantObjectId = new Types.ObjectId(variantId);
+      const variantExists = product.variants.some((v) => v._id?.toString() === variantId);
+      if (!variantExists) {
+        throw new BadRequestException('Invalid variant selected');
+      }
+    }
+
     // Find or create cart
     let cart = await this.cartModel.findOne({ userId: new Types.ObjectId(userId) });
 
@@ -114,14 +118,14 @@ export class CartService {
       });
     }
 
-    // Check if cart has reached maximum items
-    if (cart.items.length >= MAX_CART_ITEMS && !cart.items.some((item) => item.productId.toString() === productId)) {
+    // Check if cart has reached maximum unique items
+    if (
+      cart.items.length >= MAX_CART_ITEMS &&
+      !cart.items.some(
+        (item) => item.productId.toString() === productId && (!variantId || item.variantId?.toString() === variantId),
+      )
+    ) {
       throw new BadRequestException(`Cart cannot contain more than ${MAX_CART_ITEMS} unique items`);
-    }
-
-    let variantObjectId = null;
-    if (variantId) {
-      variantObjectId = new Types.ObjectId(variantId);
     }
 
     // Check if item already exists in cart
@@ -130,10 +134,9 @@ export class CartService {
     );
 
     if (existingItemIndex > -1) {
-      // Update existing item - ADD to current quantity instead of replacing
+      // Update existing item - ADD to current quantity
       const newQuantity = cart.items[existingItemIndex].quantity + quantity;
 
-      // Make sure we don't exceed the maximum quantity
       if (newQuantity > MAX_QUANTITY_PER_ITEM) {
         throw new BadRequestException(`Cannot add more items. Maximum quantity per item is ${MAX_QUANTITY_PER_ITEM}`);
       }
@@ -276,32 +279,34 @@ export class CartService {
 
     // Process each guest cart item
     for (const guestItem of guestCartItems) {
-      // Validate product
       const product = await this.productModel.findById(guestItem.productId);
-      if (!product || !product.isActive) {
-        continue; // Skip inactive or non-existent products
+      if (!product || !product.isActive || !product.variants || product.variants.length === 0) {
+        continue;
       }
 
       let variantObjectId = null;
+
       if (guestItem.variantId) {
         variantObjectId = new Types.ObjectId(guestItem.variantId);
+
+        const variant = product.variants.find((v) => v._id?.toString() === guestItem.variantId);
+
+        if (!variant) {
+          continue;
+        }
       }
 
-      // Find if item already exists in cart
       const existingItemIndex = cart.items.findIndex(
         (item) =>
           item.productId.toString() === guestItem.productId &&
           (!guestItem.variantId || item.variantId?.toString() === guestItem.variantId),
       );
 
-      // Ensure quantity is within limits
       const quantity = Math.min(Math.max(guestItem.quantity, MIN_QUANTITY_PER_ITEM), MAX_QUANTITY_PER_ITEM);
 
       if (existingItemIndex > -1) {
-        // Update existing item - take the higher quantity
         cart.items[existingItemIndex].quantity = Math.max(cart.items[existingItemIndex].quantity, quantity);
       } else {
-        // Add new item
         cart.items.push({
           productId: new Types.ObjectId(guestItem.productId),
           variantId: variantObjectId,
