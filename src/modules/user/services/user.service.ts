@@ -127,4 +127,29 @@ export class UserService {
 
     return updatedUser;
   }
+
+  async updatePassword(userId: string, currentPassword: string, newPassword: string) {
+    if (!isValidObjectId(userId)) {
+      throw new BadRequestException('Invalid user ID');
+    }
+
+    // Find user with password field
+    const user = await this.userModel.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Verify current password
+    const isPasswordValid = Hash.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    // Hash and update new password
+    const hashedPassword = Hash.make(newPassword);
+    user.password = hashedPassword;
+    await user.save();
+
+    return { success: true, message: 'Password updated successfully' };
+  }
 }

@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UserService } from '../../services/user.service';
 import { UpdateUserDto } from '../../dto/update-user.dto';
 import { AuthGuard } from '@/modules/auth/guards/auth.guard';
+import { UpdatePasswordDto } from '../../dto/update-password.dto';
 
 @ApiTags('Users')
 @Controller('users')
@@ -32,5 +33,17 @@ export class UserClientController {
   @ApiOperation({ summary: 'Get a user by ID (public)' })
   findOne(@Param('id') id: string) {
     return this.userService.findOne(id);
+  }
+
+  @Patch('profile/password')
+  @UseGuards(AuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update user password' })
+  updatePassword(@Request() req, @Body() updatePasswordDto: UpdatePasswordDto) {
+    return this.userService.updatePassword(
+      req.user.sub,
+      updatePasswordDto.currentPassword,
+      updatePasswordDto.newPassword,
+    );
   }
 }
