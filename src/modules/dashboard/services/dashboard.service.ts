@@ -42,32 +42,32 @@ export class DashboardService {
 
     return [
       {
-        title: 'Total Revenue',
+        title: 'Tổng doanh thu',
         value: currentRevenue,
         format: 'currency',
         change: calculateChange(currentRevenue, previousRevenue),
-        description: `Compared to ${this.formatPeriod(period, previousPeriodStart)}`,
+        description: `So với ${this.formatPeriod(period, previousPeriodStart)}`,
       },
       {
-        title: 'Total Products',
+        title: 'Tổng sản phẩm',
         value: currentProductCount,
         format: 'number',
         change: calculateChange(currentProductCount, previousProductCount),
-        description: `Compared to ${this.formatPeriod(period, previousPeriodStart)}`,
+        description: `So với ${this.formatPeriod(period, previousPeriodStart)}`,
       },
       {
-        title: 'Total Orders',
+        title: 'Tổng đơn hàng',
         value: currentOrderCount,
         format: 'number',
         change: calculateChange(currentOrderCount, previousOrderCount),
-        description: `Compared to ${this.formatPeriod(period, previousPeriodStart)}`,
+        description: `So với ${this.formatPeriod(period, previousPeriodStart)}`,
       },
       {
-        title: 'Total Customers',
+        title: 'Tổng khách hàng',
         value: currentCustomerCount,
         format: 'number',
         change: calculateChange(currentCustomerCount, previousCustomerCount),
-        description: `Compared to ${this.formatPeriod(period, previousPeriodStart)}`,
+        description: `So với ${this.formatPeriod(period, previousPeriodStart)}`,
       },
     ];
   }
