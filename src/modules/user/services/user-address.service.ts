@@ -12,7 +12,7 @@ export class UserAddressService {
     const userAddress = await this.userAddressModel.findOne({ userId: new Types.ObjectId(userId) });
 
     if (!userAddress) {
-      return { addresses: [] };
+      return [];
     }
 
     return userAddress.addresses;

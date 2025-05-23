@@ -17,22 +17,20 @@ export class UserAddressController {
     status: 200,
     description: 'Returns all addresses for the current user',
     schema: {
-      example: {
-        addresses: [
-          {
-            fullName: 'Nguyen Van A',
-            phone: '0912345678',
-            addressLine1: '123 Nguyen Hue Street',
-            addressLine2: 'Apartment 4B',
-            city: 'Ho Chi Minh City',
-            district: 'District 1',
-            ward: 'Ben Nghe Ward',
-            postalCode: '700000',
-            isDefault: true,
-            _id: '60d5ec9af682fbd12a0b4b72',
-          },
-        ],
-      },
+      example: [
+        {
+          fullName: 'Nguyen Van A',
+          phone: '0912345678',
+          addressLine1: '123 Nguyen Hue Street',
+          addressLine2: 'Apartment 4B',
+          city: 'Ho Chi Minh City',
+          district: 'District 1',
+          ward: 'Ben Nghe Ward',
+          postalCode: '700000',
+          isDefault: true,
+          _id: '60d5ec9af682fbd12a0b4b72',
+        },
+      ],
     },
   })
   async getAllAddresses(@Request() req) {
