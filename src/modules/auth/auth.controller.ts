@@ -5,6 +5,7 @@ import { CreateAuthDto, SignInDto } from './dto/create-auth.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { AuthGuard } from './guards/auth.guard';
 import { User } from '@/shared/decorator/user.decorator';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/forgot-password.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -89,5 +90,21 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Email is already verified' })
   resendVerificationEmail(@Body('email') email: string) {
     return this.authService.resendVerificationEmail(email);
+  }
+
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset' })
+  @ApiResponse({ status: 200, description: 'Password reset instructions sent' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(forgotPasswordDto.email);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset password with token' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired reset token' })
+  resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(resetPasswordDto.token, resetPasswordDto.newPassword);
   }
 }

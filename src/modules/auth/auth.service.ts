@@ -242,4 +242,53 @@ export class AuthService {
       avatar: user.avatar,
     };
   }
+
+  async forgotPassword(email: string) {
+    // Find user
+    const user = await this.userModel.findOne({ email });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Generate reset token
+    const resetToken = this.tokenService.generateVerificationToken();
+    const resetTokenExpires = this.tokenService.getTokenExpirationDate(1); // 1 hour
+
+    // Update user with reset token
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordTokenExpires = resetTokenExpires;
+    await user.save();
+
+    // Send password reset email
+    await this.emailService.sendPasswordResetEmail(user.email, user.username, resetToken);
+
+    return {
+      success: true,
+      message: 'Password reset instructions sent to your email',
+    };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    // Find user with this reset token
+    const user = await this.userModel.findOne({
+      resetPasswordToken: token,
+      resetPasswordTokenExpires: { $gt: new Date() },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    // Update password
+    const hashedPassword = Hash.make(newPassword);
+    user.password = hashedPassword;
+    user.resetPasswordToken = null;
+    user.resetPasswordTokenExpires = null;
+    await user.save();
+
+    return {
+      success: true,
+      message: 'Password has been reset successfully',
+    };
+  }
 }

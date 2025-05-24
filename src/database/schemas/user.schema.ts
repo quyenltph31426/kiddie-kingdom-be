@@ -45,6 +45,12 @@ export class User {
 
   @Prop({ default: null })
   lastLogin: Date;
+
+  @Prop({ type: String, default: null })
+  resetPasswordToken: string;
+
+  @Prop({ type: Date, default: null })
+  resetPasswordTokenExpires: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
