@@ -79,19 +79,23 @@ export class DashboardService {
       case 'day':
         result.setHours(0, 0, 0, 0);
         break;
+
       case 'week':
         const day = result.getDay();
         result.setDate(result.getDate() - day + (day === 0 ? -6 : 1)); // Adjust to Monday
         result.setHours(0, 0, 0, 0);
         break;
+
       case 'month':
         result.setDate(1);
         result.setHours(0, 0, 0, 0);
         break;
+
       case 'year':
         result.setMonth(0, 1);
         result.setHours(0, 0, 0, 0);
         break;
+
       default:
         result.setDate(1);
         result.setHours(0, 0, 0, 0);
@@ -107,15 +111,19 @@ export class DashboardService {
       case 'day':
         result.setDate(result.getDate() - 1);
         break;
+
       case 'week':
         result.setDate(result.getDate() - 7);
         break;
+        
       case 'month':
         result.setMonth(result.getMonth() - 1);
         break;
+
       case 'year':
         result.setFullYear(result.getFullYear() - 1);
         break;
+
       default:
         result.setMonth(result.getMonth() - 1);
     }
@@ -131,15 +139,19 @@ export class DashboardService {
         options.day = 'numeric';
         options.month = 'short';
         break;
+
       case 'week':
         return `week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+
       case 'month':
         options.month = 'long';
         options.year = 'numeric';
         break;
+
       case 'year':
         options.year = 'numeric';
         break;
+
       default:
         options.month = 'long';
         options.year = 'numeric';
@@ -608,15 +620,18 @@ export class DashboardService {
             day: 'numeric',
           });
           break;
+
         case RevenueInterval.WEEK:
           label = `Week ${item.week}, ${item.year}`;
           break;
+          
         case RevenueInterval.MONTH:
           label = new Date(item.formattedDate).toLocaleDateString('en-US', {
             year: 'numeric',
             month: 'long',
           });
           break;
+
         case RevenueInterval.YEAR:
           label = item.year.toString();
           break;
@@ -664,15 +679,18 @@ export class DashboardService {
         case 'day':
           dateFilter.$gte = new Date(now.setHours(0, 0, 0, 0));
           break;
+
         case 'week':
           const startOfWeek = new Date(now);
           startOfWeek.setDate(now.getDate() - now.getDay());
           startOfWeek.setHours(0, 0, 0, 0);
           dateFilter.$gte = startOfWeek;
           break;
+
         case 'month':
           dateFilter.$gte = new Date(now.getFullYear(), now.getMonth(), 1);
           break;
+          
         case 'year':
           dateFilter.$gte = new Date(now.getFullYear(), 0, 1);
           break;

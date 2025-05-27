@@ -20,12 +20,14 @@ export class DashboardController {
     return this.dashboardService.getStats(period);
   }
 
+
   @Get('detailed-stats')
   @ApiOperation({ summary: 'Get detailed dashboard statistics' })
   @AdminRolesAllowed(AdminRoles.ADMIN)
   getDetailedStats() {
     return this.dashboardService.getDetailedStats();
   }
+
 
   @Get('revenue-stats')
   @ApiOperation({ summary: 'Get revenue statistics by interval' })
@@ -38,6 +40,7 @@ export class DashboardController {
     return this.dashboardService.getRevenueStats(revenueStatsDto);
   }
 
+
   @Get('top-products')
   @ApiOperation({ summary: 'Get top selling products' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of products to return' })
@@ -47,6 +50,7 @@ export class DashboardController {
     return this.dashboardService.getTopSellingProducts(limit, period);
   }
 
+  
   @Get('top-customers')
   @ApiOperation({ summary: 'Get top customers by spending' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of customers to return' })
