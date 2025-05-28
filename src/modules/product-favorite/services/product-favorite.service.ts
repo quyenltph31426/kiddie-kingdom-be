@@ -42,24 +42,56 @@ export class ProductFavoriteService {
   async getFavorites(userId: string, page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
 
-    const [items, total] = await Promise.all([
+    const [favorites, total] = await Promise.all([
       this.favoriteModel
         .find({ userId: new Types.ObjectId(userId) })
         .skip(skip)
         .limit(limit)
         .sort({ createdAt: -1 })
-        .populate('productId', 'name slug images variants'),
+        .populate({
+          path: 'productId',
+          select:
+            'name slug images variants primaryCategoryId brandId originalPrice averageRating reviewCount viewCount',
+          populate: [
+            { path: 'primaryCategoryId', select: 'name slug' },
+            { path: 'brandId', select: 'name slug' },
+          ],
+        }),
       this.favoriteModel.countDocuments({ userId: new Types.ObjectId(userId) }),
     ]);
 
-    // Transform the data to return product details
-    const favorites = items.map((item) => ({
-      ...item,
-      product: item.productId,
-    }));
+    const products = favorites.map((favorite) => {
+      // Use type assertion to handle populated document
+      const productDoc = favorite.productId as unknown as ProductDocument;
+      const product = productDoc.toObject ? productDoc.toObject() : productDoc;
+
+      // Add favorite ID to make removal easier
+      product.favoriteId = favorite._id;
+
+      // All products in this list are favorites
+      product.isFavorite = true;
+
+      const { primaryCategoryId, brandId, variants, ...rest } = product;
+
+      return {
+        ...rest,
+        primaryCategory: primaryCategoryId,
+        brand: brandId,
+        currentPrice: Math.min(...variants.map((variant) => variant.price)),
+        totalQuantity: variants.reduce((acc, variant) => acc + variant.quantity, 0),
+        totalSoldCount: variants.reduce((acc, variant) => acc + (variant.soldCount || 0), 0),
+        variants: variants.map((variant) => ({
+          sku: variant.sku,
+          price: variant.price,
+          quantity: variant.quantity,
+          attributes: variant.attributes,
+          _id: variant._id,
+        })),
+      };
+    });
 
     return {
-      items: favorites,
+      items: products,
       meta: {
         total,
         page,
