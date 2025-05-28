@@ -209,6 +209,14 @@ export class OrderAdminService {
       order.deliveredAt = updateOrderDto.deliveredAt;
     }
 
+    if (updateOrderDto.userNote) {
+      order.userNote = updateOrderDto.userNote;
+    }
+
+    if (updateOrderDto.shipperOfProof) {
+      order.shipperOfProof = updateOrderDto.shipperOfProof;
+    }
+
     return order.save();
   }
 
