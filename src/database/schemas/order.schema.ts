@@ -97,6 +97,12 @@ export class Order {
   @Prop({ type: String, default: null, required: false })
   cancelledReason: string;
 
+  @Prop({ type: String, default: null, required: false })
+  userNote: string;
+
+  @Prop({ type: [String], default: [] })
+  shipperOfProof: string[];
+
   // Explicitly define timestamps
   createdAt: Date;
   updatedAt: Date;
