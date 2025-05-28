@@ -132,7 +132,7 @@ export class DashboardService {
         options.month = 'short';
         break;
       case 'week':
-        return `week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+        return `tuần trước ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
       case 'month':
         options.month = 'long';
         options.year = 'numeric';
