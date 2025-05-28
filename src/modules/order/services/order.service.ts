@@ -77,7 +77,7 @@ export class OrderService {
 
               if (variant.quantity < item.quantity) {
                 throw new BadRequestException(
-                  `Product ${product.name} (variant ${variant.sku || 'unknown'}) is out of stock`,
+                  `Product ${product.name} (variant ${variant.sku || 'unknown'}) đã hết hàng`,
                 );
               }
 
