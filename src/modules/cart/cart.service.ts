@@ -48,6 +48,9 @@ export class CartService {
         if (!variant) return null;
 
         totalQuantity = variant.quantity || 0;
+
+        if (totalQuantity === 0) return null;
+
         price =
           variant.price ??
           (variant.salePrice && product.isOnSale ? variant.salePrice : undefined) ??
