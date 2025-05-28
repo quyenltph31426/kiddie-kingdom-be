@@ -360,7 +360,7 @@ export class OrderService {
     };
   }
 
-  async getOrderDetails(id: string, userId: string): Promise<Order> {
+  async getOrderDetails(id: string, userId: string): Promise<any> {
     const order = await this.orderModel.findOne({
       _id: new Types.ObjectId(id),
       userId: new Types.ObjectId(userId),
@@ -370,7 +370,75 @@ export class OrderService {
       throw new NotFoundException('Order not found');
     }
 
-    return order;
+    // Get product IDs from order items
+    const productIds = order.items.map((item) => item.productId);
+
+    // Fetch product details
+    const products = await this.productModel
+      .find({
+        _id: { $in: productIds },
+      })
+      .select('name images variants');
+
+    // Create product map for quick lookup
+    const productMap = new Map();
+    products.forEach((product) => {
+      productMap.set(product._id.toString(), {
+        name: product.name,
+        image: product.images && product.images.length > 0 ? product.images[0] : null,
+        variants: product.variants || [],
+      });
+    });
+
+    // Check if user has reviewed products in this order
+    const userReviews = await this.reviewModel.find({
+      userId: new Types.ObjectId(userId),
+      productId: { $in: productIds },
+      orderId: order._id,
+    });
+
+    // Create map of reviewed products
+    const reviewedProductMap = new Map();
+    userReviews.forEach((review) => {
+      const key = `${review.productId.toString()}_${order._id.toString()}`;
+      reviewedProductMap.set(key, true);
+    });
+
+    // Convert order to object and enrich with product details
+    const orderObj = order.toObject ? order.toObject() : order;
+
+    // Enrich order items with product details
+    const enrichedItems = orderObj.items.map((item) => {
+      const productInfo = productMap.get(item.productId.toString());
+
+      const reviewKey = `${item.productId.toString()}_${orderObj._id.toString()}`;
+      const isReviewed = reviewedProductMap.has(reviewKey);
+
+      if (!productInfo) {
+        return {
+          ...item,
+          isReviewed,
+        };
+      }
+
+      let variantInfo = null;
+      if (item.variantId && productInfo.variants) {
+        variantInfo = productInfo.variants.find((variant) => variant._id.toString() === item.variantId.toString());
+      }
+
+      return {
+        ...item,
+        productName: productInfo.name,
+        productImage: productInfo.image,
+        attributes: variantInfo ? variantInfo.attributes : {},
+        isReviewed,
+      };
+    });
+
+    return {
+      ...orderObj,
+      items: enrichedItems,
+    };
   }
 
   async cancelOrder(id: string, userId: string): Promise<Order> {
