@@ -27,7 +27,6 @@ export class EmailController {
 
     return {
       success: result,
-      message: result ? 'Email sent successfully' : 'Failed to send email',
     };
   }
 }
